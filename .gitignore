@@ -1,0 +1,5 @@
+*.o
+.*.sw[op]
+.ninja_deps
+.ninja_log
+config.ninja

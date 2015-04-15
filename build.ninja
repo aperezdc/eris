@@ -1,0 +1,93 @@
+include config.ninja
+
+cflags = -std=gnu99 -Wall $CFLAGS
+lua = lua-5.3.0
+
+rule cc
+  deps = gcc
+  depfile = $out.d
+  command = $cc $cflags $cppflags -c -o $out -MMD -MF $out.d $in
+  description = Compile $out
+
+rule ld
+  command = $cc $ldflags -o $out $in $libs
+  description = Link $out
+
+# Lua sources
+build $obj/lua.lapi.o     : cc $lua/src/lapi.c
+build $obj/lua.lauxlib.o  : cc $lua/src/lauxlib.c
+build $obj/lua.lbaselib.o : cc $lua/src/lbaselib.c
+build $obj/lua.lbitlib.o  : cc $lua/src/lbitlib.c
+build $obj/lua.lcode.o    : cc $lua/src/lcode.c
+build $obj/lua.lcorolib.o : cc $lua/src/lcorolib.c
+build $obj/lua.lctype.o   : cc $lua/src/lctype.c
+build $obj/lua.ldblib.o   : cc $lua/src/ldblib.c
+build $obj/lua.ldebug.o   : cc $lua/src/ldebug.c
+build $obj/lua.ldo.o      : cc $lua/src/ldo.c
+build $obj/lua.ldump.o    : cc $lua/src/ldump.c
+build $obj/lua.lfunc.o    : cc $lua/src/lfunc.c
+build $obj/lua.lgc.o      : cc $lua/src/lgc.c
+build $obj/lua.linit.o    : cc $lua/src/linit.c
+build $obj/lua.liolib.o   : cc $lua/src/liolib.c
+build $obj/lua.llex.o     : cc $lua/src/llex.c
+build $obj/lua.lmathlib.o : cc $lua/src/lmathlib.c
+build $obj/lua.lmem.o     : cc $lua/src/lmem.c
+build $obj/lua.loadlib.o  : cc $lua/src/loadlib.c
+build $obj/lua.lobject.o  : cc $lua/src/lobject.c
+build $obj/lua.lopcodes.o : cc $lua/src/lopcodes.c
+build $obj/lua.loslib.o   : cc $lua/src/loslib.c
+build $obj/lua.lparser.o  : cc $lua/src/lparser.c
+build $obj/lua.lstate.o   : cc $lua/src/lstate.c
+build $obj/lua.lstring.o  : cc $lua/src/lstring.c
+build $obj/lua.lstrlib.o  : cc $lua/src/lstrlib.c
+build $obj/lua.ltable.o   : cc $lua/src/ltable.c
+build $obj/lua.ltablib.o  : cc $lua/src/ltablib.c
+build $obj/lua.ltm.o      : cc $lua/src/ltm.c
+build $obj/lua.luac.o     : cc $lua/src/luac.c
+build $obj/lua.lundump.o  : cc $lua/src/lundump.c
+build $obj/lua.lutf8lib.o : cc $lua/src/lutf8lib.c
+build $obj/lua.lvm.o      : cc $lua/src/lvm.c
+build $obj/lua.lzio.o     : cc $lua/src/lzio.c
+build $obj/lua.lua.o      : cc $lua/src/lua.c
+  cflags = $cflags -DLUA_PROGNAME='"eris"' -DLUA_PROMPT='"(eris) "' -DLUA_PROMPT2='"  ...) "'
+
+build $obj/eris: ld $
+$obj/lua.lapi.o     $
+$obj/lua.lauxlib.o  $
+$obj/lua.lbaselib.o $
+$obj/lua.lbitlib.o  $
+$obj/lua.lcode.o    $
+$obj/lua.lcorolib.o $
+$obj/lua.lctype.o   $
+$obj/lua.ldblib.o   $
+$obj/lua.ldebug.o   $
+$obj/lua.ldo.o      $
+$obj/lua.ldump.o    $
+$obj/lua.lfunc.o    $
+$obj/lua.lgc.o      $
+$obj/lua.linit.o    $
+$obj/lua.liolib.o   $
+$obj/lua.llex.o     $
+$obj/lua.lmathlib.o $
+$obj/lua.lmem.o     $
+$obj/lua.loadlib.o  $
+$obj/lua.lobject.o  $
+$obj/lua.lopcodes.o $
+$obj/lua.loslib.o   $
+$obj/lua.lparser.o  $
+$obj/lua.lstate.o   $
+$obj/lua.lstring.o  $
+$obj/lua.lstrlib.o  $
+$obj/lua.ltable.o   $
+$obj/lua.ltablib.o  $
+$obj/lua.ltm.o      $
+$obj/lua.lua.o      $
+$obj/lua.lundump.o  $
+$obj/lua.lutf8lib.o $
+$obj/lua.lvm.o      $
+$obj/lua.lzio.o
+  libs = $libs -lm
+
+#$obj/lua.luac.o     $
+
+default $obj/eris
