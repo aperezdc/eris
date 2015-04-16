@@ -33,6 +33,13 @@ for var in "$@" ; do
 done
 
 
+die ()
+{
+	echo "$*" 1>&2
+	exit 1
+}
+
+
 pick_one ()
 {
 	while test -n "$1" ; do
@@ -56,7 +63,7 @@ compiler_is_clang ()
 # EOF
 try_link ()
 {
-	echo -n "Checking for $* ... "
+	echo -n "Checking for $1 ... "
 	local tempfile="/tmp/compile-test-$$.c"
 	local result=1
 	cat > "${tempfile}"
@@ -147,6 +154,24 @@ if ${asan_build} ; then
 fi
 
 
+# Mandatory libraries
+if ! try_link -lelf <<-EOF
+	#include <libelf.h>
+	int main () { Elf* elf = elf_begin (0, ELF_C_READ, (Elf*) 0); return 0; }
+	EOF
+then
+	die "Could not find libelf"
+fi
+
+if ! try_link -ldwarf -lelf <<-EOF
+	#include <libdwarf/libdwarf.h>
+	int main () { return dwarf_init (0, 0, 0, 0, 0, 0); }
+	EOF
+then
+	die "Could not find libdwarf"
+fi
+
+# Optional libraries
 if try_link -ldl <<-EOF
 	#include <dlfcn.h>
 	int main () { return dlopen ((void*) 0, 0) != (void*) 0; }
@@ -171,8 +196,8 @@ cat >> config.ninja <<EOF
 prefix   = ${PREFIX}
 cc       = ${CC}
 CFLAGS   = ${CFLAGS} \${EXTRA_CFLAGS}
-cppflags = ${CPPFLAGS} \${EXTRA_CPPFLAGS}
-ldflags  = ${LDFLAGS} \${EXTRA_LDFLAGS}
+CPPFLAGS = ${CPPFLAGS} \${EXTRA_CPPFLAGS}
+LDFLAGS  = ${LDFLAGS} \${EXTRA_LDFLAGS}
 libs     = ${LIBS} \${EXTRA_LIBS}
 obj      = ${objdir}
 EOF
