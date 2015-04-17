@@ -46,13 +46,14 @@ build $obj/lua.lstrlib.o  : cc lua/src/lstrlib.c
 build $obj/lua.ltable.o   : cc lua/src/ltable.c
 build $obj/lua.ltablib.o  : cc lua/src/ltablib.c
 build $obj/lua.ltm.o      : cc lua/src/ltm.c
-build $obj/lua.luac.o     : cc lua/src/luac.c
 build $obj/lua.lundump.o  : cc lua/src/lundump.c
 build $obj/lua.lutf8lib.o : cc lua/src/lutf8lib.c
 build $obj/lua.lvm.o      : cc lua/src/lvm.c
 build $obj/lua.lzio.o     : cc lua/src/lzio.c
 build $obj/lua.lua.o      : cc lua/src/lua.c
   cflags = $cflags -DLUA_PROGNAME='"eris"' -DLUA_PROMPT='"(eris) "' -DLUA_PROMPT2='"  ...) "'
+
+#build $obj/lua.luac.o     : cc lua/src/luac.c
 
 build $obj/eris: ld $
 $obj/lua.lapi.o     $
