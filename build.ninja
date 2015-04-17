@@ -1,4 +1,4 @@
-include config.ninja
+include build.conf
 
 cflags   = -std=gnu99 -Wall $CFLAGS
 cppflags = -Ilua/src $CPPFLAGS

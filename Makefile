@@ -3,25 +3,24 @@
 # Adrian Perez, 2015-04-17 10:59
 #
 
--include config.ninja
 
 # Make sure we avoid indirection of variables as much as possible, by forcing
 # expansion of some of them, or by reassigning them to other variables more
 # commonly used in Makefiles.
 
-PREFIX := ${prefix}
-LDLIBS := ${libs}
-OUT    := ${obj}
-CC     := ${cc}
 
-EXPANDED_CFLAGS := -std=gnu99 -Wall ${CFLAGS}
-CFLAGS = ${EXPANDED_CFLAGS}
+-include build.conf
 
-EXPANDED_CPPFLAGS := ${CPPFLAGS}
-CPPFLAGS = ${EXPANDED_CPPFLAGS}
+OUT     := ${obj}
+PREFIX   = ${prefix}
+LDLIBS   = ${libs}
+CC       = ${cc}
+LDFLAGS += -Wl,-E
 
-EXPANDED_LDFLAGS := -Wl,-E ${LDFLAGS}
-LDFLAGS = ${EXPANDED_LDFLAGS}
+# We want -Wall *before* the other CFLAGS, so we have to force its
+# expansion and then re-assign to the variable.
+EXPAND_CFLAGS := -std=gnu99 -Wall ${CFLAGS}
+CFLAGS = ${EXPAND_CFLAGS}
 
 # Lua sources.
 LUA_SRCS := lapi.c lauxlib.c lbaselib.c lbitlib.c lcode.c lcorolib.c \
@@ -67,7 +66,7 @@ ${OUT}/lua/src/lua.o: CPPFLAGS += -DLUA_PROGNAME='"eris"' \
 	                              -DLUA_PROMPT='"(eris) "' \
 	                              -DLUA_PROMPT2='"  ...) "'
 
-config.ninja: configure
+build.conf: configure
 	./configure
 
 # Include compiler-generated dependencies (if available).
