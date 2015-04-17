@@ -30,19 +30,22 @@ find_library (const char *name, char path[PATH_MAX])
 {
     /* TODO: Handle multilib systems (lib32 vs. lib64) */
     static const char *search_paths[] = {
-        "/lib",
-        "/usr/lib",
-        "/usr/local/lib",
+        "", /* For relative and absolute paths. */
+        "/lib/",
+        "/usr/lib/",
+        "/usr/local/lib/",
     };
 
+    char try_path[PATH_MAX];
     for (size_t i = 0; i < LENGTH_OF (search_paths); i++) {
-        if (snprintf (path, PATH_MAX, "%s/%s" ERIS_LIB_SUFFIX,
+        if (snprintf (try_path, PATH_MAX, "%s%s" ERIS_LIB_SUFFIX,
                       search_paths[i], name) > PATH_MAX) {
             return false;
         }
 
         struct stat sb;
-        if (stat (path, &sb) == 0 && S_ISREG (sb.st_mode) &&
+        if (realpath (try_path, path) &&
+            stat (path, &sb) == 0 && S_ISREG (sb.st_mode) &&
             ((sb.st_mode & (S_IRUSR | S_IRGRP | S_IROTH)) != 0)) {
             return true;
         }
@@ -59,17 +62,10 @@ eris_load (lua_State *L)
     const char *name = luaL_checklstring (L, 1, &name_length);
     char path[PATH_MAX];
 
-    if (name_length > 1 && (name[0] == '/' || name[0] == '.')) {
-        /* Absolute or relative path: resolve using realpath(). */
-        if (!realpath (name, path)) {
-            return luaL_error (L, "could not find real path of '%s' (%s)",
-                               name, strerror (errno));
-        }
-    } else {
-        /* Some name: find library in system directories. */
-        if (!find_library (name, path)) {
-            return luaL_error (L, "could not find library '%s'", name);
-        }
+    errno = 0;
+    if (!find_library (name, path)) {
+        return luaL_error (L, "could not find library '%s' (%s)", name,
+                           (errno == 0) ? "path too long" : strerror (errno));
     }
 
     lua_pushstring (L, path);
