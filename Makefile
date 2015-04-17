@@ -60,12 +60,14 @@ ${OUT}/%:
 
 
 all: ${OUT}/eris \
-	 ${OUT}/eris.so
+	 ${OUT}/eris.so \
+	 ${OUT}/libtest.so
 
 clean:
 	$P CLEAN
 	$Q ${RM} ${OUT}/eris ${LUA_OBJS}
 	$Q ${RM} ${OUT}/eris.so ${ERIS_MODULE_OBJS}
+	$Q ${RM} ${OUT}/libtest.so ${OUT}/libtest.o
 
 ${OUT}/eris: ${LUA_OBJS}
 ${OUT}/eris: LDLIBS += -lm
@@ -73,6 +75,9 @@ ${OUT}/eris: LDLIBS += -lm
 ${OUT}/eris.so: ${ERIS_MODULE_OBJS}
 ${OUT}/eris.so: LDFLAGS += -shared
 ${OUT}/eris.so: LDLIBS += -ldwarf -lelf
+
+${OUT}/libtest.so: ${OUT}/libtest.o
+${OUT}/libtest.so: LDFLAGS += -shared
 
 ${OUT}/lua/src/lua.o: CPPFLAGS += -DLUA_PROGNAME='"eris"' \
 	                              -DLUA_PROMPT='"(eris) "' \
