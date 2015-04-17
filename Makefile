@@ -42,12 +42,10 @@ LUA_SRCS := lapi.c lauxlib.c lbaselib.c lbitlib.c lcode.c lcorolib.c \
             lutf8lib.c lzio.c lua.c
 LUA_SRCS := $(addprefix lua/src/,${LUA_SRCS})
 LUA_OBJS := $(patsubst %.c,${OUT}/%.o,${LUA_SRCS})
-LUA_DEPS := $(patsubst %,%.d,${LUA_OBJS})
 
 # Eris (non-JIT) module sources.
 ERIS_MODULE_SRCS := eris-module.c
 ERIS_MODULE_OBJS := $(patsubst %.c,${OUT}/%.o,${ERIS_MODULE_SRCS})
-ERIS_MODULE_DEPS := $(patsubst %,%.d,${ERIS_MODULE_OBJS})
 
 
 ${OUT}/%.o: %.c
@@ -82,6 +80,3 @@ ${OUT}/lua/src/lua.o: CPPFLAGS += -DLUA_PROGNAME='"eris"' \
 
 build.conf: configure
 	./configure
-
-# Include compiler-generated dependencies (if available).
--include ${LUA_DEPS} ${ERIS_MODULE_DEPS}
