@@ -3,10 +3,21 @@
 # Adrian Perez, 2015-04-17 10:59
 #
 
+# Handle V=(0|1) in the command line. This must be the first thing done!
+__verbose := 0
+ifeq ($(origin V),command line)
+  ifneq ($(strip $V),0)
+    __verbose := 1
+  endif
+endif
 
-# Make sure we avoid indirection of variables as much as possible, by forcing
-# expansion of some of them, or by reassigning them to other variables more
-# commonly used in Makefiles.
+ifeq (${__verbose},0)
+  P := @printf ' %6s %s\n'
+  Q := @
+else
+  P := @:
+  Q :=
+endif
 
 
 -include build.conf
@@ -40,20 +51,23 @@ ERIS_MODULE_DEPS := $(patsubst %,%.d,${ERIS_MODULE_OBJS})
 
 
 ${OUT}/%.o: %.c
-	mkdir -p $(dir $@)
-	${CC} ${CFLAGS} ${CPPFLAGS} -c -o $@ -MMD -MF $@.d $<
+	$P CC $@
+	$Q mkdir -p $(dir $@)
+	$Q ${CC} ${CFLAGS} ${CPPFLAGS} -c -o $@ $<
 
 ${OUT}/%:
-	mkdir -p $(dir $@)
-	${CC} ${CFLAGS} ${LDFLAGS} -o $@ $^ ${LDLIBS}
+	$P LD $@
+	$Q mkdir -p $(dir $@)
+	$Q ${CC} ${CFLAGS} ${LDFLAGS} -o $@ $^ ${LDLIBS}
 
 
 all: ${OUT}/eris \
 	 ${OUT}/eris.so
 
 clean:
-	${RM} ${OUT}/eris ${LUA_OBJS} ${LUA_DEPS}
-	${RM} ${OUT}/eris.so ${ERIS_MODULE_OBJS} ${ERIS_MODULE_DEPS}
+	$P CLEAN
+	$Q ${RM} ${OUT}/eris ${LUA_OBJS}
+	$Q ${RM} ${OUT}/eris.so ${ERIS_MODULE_OBJS}
 
 ${OUT}/eris: ${LUA_OBJS}
 ${OUT}/eris: LDLIBS += -lm
