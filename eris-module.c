@@ -17,12 +17,22 @@
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
+#include <fcntl.h>
 #include <errno.h>
 
 
 #ifndef ERIS_LIB_SUFFIX
 #define ERIS_LIB_SUFFIX ".so"
 #endif /* !ERIS_LIB_SUFFIX */
+
+
+static const char ERIS_LIBRARY[] = "org.perezdecastro.eris.Library";
+
+
+typedef struct {
+    int         fd;
+    Dwarf_Debug dd;
+} ErisLibrary;
 
 
 static bool
@@ -55,6 +65,57 @@ find_library (const char *name, char path[PATH_MAX])
 }
 
 
+#define to_eris_handle(L) \
+    ((ErisLibrary*) luaL_checkudata (L, 1, ERIS_LIBRARY))
+
+
+static int
+eris_handle_close (lua_State *L)
+{
+    return 0;
+}
+
+
+static int
+eris_handle_gc (lua_State *L)
+{
+    return 0;
+}
+
+
+static int
+eris_handle_tostring (lua_State *L)
+{
+    ErisLibrary *e = to_eris_handle (L);
+    if (e->dd) {
+        lua_pushfstring (L, "library (%p)", e->dd);
+    } else {
+        lua_pushliteral (L, "library (closed)");
+    }
+    return 1;
+}
+
+
+/* Methods for Erisuserdatas. */
+static const luaL_Reg eris_handle_methods[] = {
+    { "close",      eris_handle_close    },
+    { "__gc",       eris_handle_gc       },
+    { "__tostring", eris_handle_tostring },
+    { NULL, NULL }
+};
+
+
+static void
+create_meta (lua_State *L)
+{
+    luaL_newmetatable (L, ERIS_LIBRARY);
+    lua_pushvalue (L, -1);           /* Push metatable */
+    lua_setfield (L, -2, "__index"); /* metatable.__index == metatable */
+    luaL_setfuncs (L, eris_handle_methods, 0);
+    lua_pop (L, 1);
+}
+
+
 static int
 eris_load (lua_State *L)
 {
@@ -68,7 +129,28 @@ eris_load (lua_State *L)
                            (errno == 0) ? "path too long" : strerror (errno));
     }
 
-    lua_pushstring (L, path);
+    int fd = open (path, O_RDONLY, 0);
+    if (fd < 0) {
+        return luaL_error (L, "could not open '%s' for reading (%s)",
+                           path, strerror (errno));
+    }
+
+    Dwarf_Handler dd_error_handler = 0;
+    Dwarf_Ptr dd_error_argument = 0;
+    Dwarf_Error dd_error;
+    Dwarf_Debug dd;
+
+    if (dwarf_init (fd, DW_DLC_READ,
+                    dd_error_handler, dd_error_argument,
+                    &dd, &dd_error) != DW_DLV_OK) {
+        return luaL_error (L, "error reading debug information from '%s' (%s)",
+                           path, dwarf_errmsg (dd_error));
+    }
+
+    ErisLibrary *handle = lua_newuserdata (L, sizeof (ErisLibrary));
+    handle->fd = fd;
+    handle->dd = dd;
+    luaL_setmetatable (L, ERIS_LIBRARY);
     return 1;
 }
 
@@ -83,5 +165,6 @@ LUAMOD_API int
 luaopen_eris (lua_State *L)
 {
     luaL_newlib (L, erislib);
+    create_meta (L);
     return 1;
 }
