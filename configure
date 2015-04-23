@@ -63,7 +63,8 @@ compiler_is_clang ()
 # EOF
 try_link ()
 {
-	echo -n "Checking for $1 ... "
+	echo -n "Checking for $1 in $2 ... "
+	shift
 	local tempfile="/tmp/compile-test-$$.c"
 	local result=1
 	cat > "${tempfile}"
@@ -155,7 +156,7 @@ fi
 
 
 # Mandatory libraries
-if ! try_link -lelf <<-EOF
+if ! try_link 'elf_begin()' -lelf <<-EOF
 	#include <libelf.h>
 	int main () { Elf* elf = elf_begin (0, ELF_C_READ, (Elf*) 0); return 0; }
 	EOF
@@ -163,7 +164,7 @@ then
 	die "Could not find libelf"
 fi
 
-if ! try_link -ldwarf -lelf <<-EOF
+if ! try_link 'dwarf_init()' -ldwarf -lelf <<-EOF
 	#include <libdwarf/libdwarf.h>
 	int main () { return dwarf_init (0, 0, 0, 0, 0, 0); }
 	EOF
@@ -171,8 +172,7 @@ then
 	die "Could not find libdwarf"
 fi
 
-# Optional libraries
-if try_link -ldl <<-EOF
+if try_link 'dlopen()' -ldl <<-EOF
 	#include <dlfcn.h>
 	int main () { return dlopen ((void*) 0, 0) != (void*) 0; }
 	EOF
@@ -181,7 +181,7 @@ then
 	LIBS="${LIBS} -ldl"
 fi
 
-if try_link -lreadline <<-EOF
+if try_link 'readline()' -lreadline <<-EOF
 	#include <stdio.h>
 	#include <readline/readline.h>
 	int main () { char* r = readline ("prompt"); return 0; }
