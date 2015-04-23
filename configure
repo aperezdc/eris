@@ -161,7 +161,7 @@ if ! try_link 'elf_begin()' -lelf <<-EOF
 	int main () { Elf* elf = elf_begin (0, ELF_C_READ, (Elf*) 0); return 0; }
 	EOF
 then
-	die "Could not find libelf"
+	die 'Could not find libelf'
 fi
 
 if ! try_link 'dwarf_init()' -ldwarf -lelf <<-EOF
@@ -169,7 +169,7 @@ if ! try_link 'dwarf_init()' -ldwarf -lelf <<-EOF
 	int main () { return dwarf_init (0, 0, 0, 0, 0, 0); }
 	EOF
 then
-	die "Could not find libdwarf"
+	die 'Could not find libdwarf'
 fi
 
 if try_link 'dlopen()' -ldl <<-EOF
@@ -179,6 +179,8 @@ if try_link 'dlopen()' -ldl <<-EOF
 then
 	CPPFLAGS="${CPPFLAGS} -DLUA_USE_DLOPEN=1"
 	LIBS="${LIBS} -ldl"
+else
+	die 'Could not find libdl'
 fi
 
 if try_link 'readline()' -lreadline <<-EOF
