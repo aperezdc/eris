@@ -81,6 +81,36 @@ try_link ()
 }
 
 
+# Usage: try_header <header> <compiler-flags>
+try_header ()
+{
+	echo -n "Checking for $1 ... "
+	local tempfile="/tmp/preprocess-test-$$.c"
+	local result=1
+	cat > "${tempfile}" <<-EOF
+	#include $1
+	EOF
+	shift
+	if "${CC}" ${CFLAGS} -o "${tempfile}.i" "${tempfile}" \
+		${CPPFLAGS} -E "$@" &> /dev/null
+	then
+		echo yes
+		result=0
+	else
+		echo no
+	fi
+	rm -f "${tempfile}" "${tempfile}.i"
+	return ${result}
+}
+
+
+# Usage: mandatory_header <header> <compiler-flags>
+mandatory_header ()
+{
+	try_header "$@" || die "Header $1 is needed"
+}
+
+
 # Inherit variables from the environment, if defined. For tools,
 # try to make a sensible choice by default.
 #
@@ -155,7 +185,11 @@ if ${asan_build} ; then
 fi
 
 
-# Mandatory libraries
+need_gnu_source_def=false
+
+# Mandatory headers and libraries.
+mandatory_header '<dlfcn.h>'
+
 if ! try_link 'elf_begin()' -lelf <<-EOF
 	#include <libelf.h>
 	int main () { Elf* elf = elf_begin (0, ELF_C_READ, (Elf*) 0); return 0; }
@@ -183,6 +217,20 @@ else
 	die 'Could not find libdl'
 fi
 
+
+##################################### Optional headers and libraries ######
+
+# This is system-specific, and known to work on glibc-based systems.
+if try_header '<link.h>' && try_link 'dlinfo()' -ldl <<-EOF
+	#define _GNU_SOURCE 1
+	#include <dlfcn.h>
+	int main () { return dlinfo ((void*) 1, 0, (void*) 1); }
+	EOF
+then
+	CPPFLAGS="${CPPFLAGS} -DERIS_USE_LINK_H=1"
+	need_gnu_source_def=true
+fi
+
 if try_link 'readline()' -lreadline <<-EOF
 	#include <stdio.h>
 	#include <readline/readline.h>
@@ -191,6 +239,12 @@ if try_link 'readline()' -lreadline <<-EOF
 then
 	CPPFLAGS="${CPPFLAGS} -DLUA_USE_READLINE=1"
 	LIBS="${LIBS} -lreadline"
+fi
+
+####################################################### Final fixups ######
+
+if ${need_gnu_source_def} ; then
+	CPPFLAGS="${CPPFLAGS} -D_GNU_SOURCE=1"
 fi
 
 
