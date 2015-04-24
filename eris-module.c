@@ -8,7 +8,7 @@
 #include "lua/src/lua.h"
 #include "lua/src/lauxlib.h"
 
-#include "util.h"
+#include "eris-util.h"
 
 #include <libdwarf/libdwarf.h>
 #include <sys/types.h>
