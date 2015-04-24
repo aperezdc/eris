@@ -11,12 +11,13 @@ ifeq ($(origin V),command line)
   endif
 endif
 
+P := @:
+Q :=
 ifeq (${__verbose},0)
-  P := @printf ' %6s %s\n'
-  Q := @
-else
-  P := @:
-  Q :=
+  ifneq (${MAKE_TERMOUT},)
+    P := @printf '[1G[K%s %s '
+    Q := @
+  endif
 endif
 
 
@@ -49,12 +50,12 @@ ERIS_MODULE_OBJS := $(patsubst %.c,${OUT}/%.o,${ERIS_MODULE_SRCS})
 
 
 ${OUT}/%.o: %.c
-	$P CC $@
+	$P Compile $@
 	$Q mkdir -p $(dir $@)
 	$Q ${CC} ${CFLAGS} ${CPPFLAGS} -c -o $@ $<
 
 ${OUT}/%:
-	$P LD $@
+	$P Link $@
 	$Q mkdir -p $(dir $@)
 	$Q ${CC} ${CFLAGS} ${LDFLAGS} -o $@ $^ ${LDLIBS}
 
@@ -62,12 +63,14 @@ ${OUT}/%:
 all: ${OUT}/eris \
 	 ${OUT}/eris.so \
 	 ${OUT}/libtest.so
+	$(if ${MAKE_TERMOUT},$Q echo)
 
 clean:
-	$P CLEAN
+	$P Clean
 	$Q ${RM} ${OUT}/eris ${LUA_OBJS}
 	$Q ${RM} ${OUT}/eris.so ${ERIS_MODULE_OBJS}
 	$Q ${RM} ${OUT}/libtest.so ${OUT}/libtest.o
+	$(if ${MAKE_TERMOUT},$Q echo)
 
 ${OUT}/eris: ${LUA_OBJS}
 ${OUT}/eris: LDLIBS += -lm
