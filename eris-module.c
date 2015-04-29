@@ -181,7 +181,7 @@ static int
 eris_function_call (lua_State *L)
 {
     ErisFunction *f = to_eris_function (L);
-    TRACE ("%p:%p (%s)\n", f->library, f, f->name);
+    TRACE ("%p (%p:%s)\n", f, f->library, f->name);
     return 0;
 }
 
