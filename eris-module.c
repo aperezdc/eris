@@ -34,10 +34,13 @@
  * Data needed for each library loaded by "eris.load()".
  */
 typedef struct {
-    int         fd;
-    Dwarf_Debug dd;
-    void       *dl;
-    intptr_t    dl_diff;
+    int           fd;
+    Dwarf_Debug   dd;
+    void         *dl;
+    intptr_t      dl_diff;
+
+    Dwarf_Global *globals;
+    Dwarf_Signed  num_globals;
 } ErisLibrary;
 
 
@@ -115,8 +118,13 @@ eris_library_gc (lua_State *L)
     ErisLibrary *e = to_eris_library (L);
     TRACE ("%p\n", e);
 
+    if (e->globals) {
+        dwarf_globals_dealloc (e->dd, e->globals, e->num_globals);
+    }
+
     Dwarf_Error dd_error;
     dwarf_finish (e->dd, &dd_error);
+
     close (e->fd);
     dlclose (e->dl);
 
@@ -271,10 +279,36 @@ eris_load (lua_State *L)
                            path, dwarf_errmsg (dd_error));
     }
 
+    Dwarf_Signed num_globals = 0;
+    Dwarf_Global *globals = NULL;
+    if (dwarf_get_globals (dd,
+                           &globals,
+                           &num_globals,
+                           &dd_error) != DW_DLV_OK) {
+        dwarf_finish (dd, &dd_error);
+        close (fd);
+        dlclose (dl);
+        /* TODO: Provide a better error message. */
+        return luaL_error (L, "cannot read globals");
+    }
+    TRACE ("found %ld globals\n", (long) num_globals);
+#if defined(ERIS_TRACE) && ERIS_TRACE > 0
+    for (Dwarf_Signed i = 0; i < num_globals; i++) {
+        char *name = NULL;
+        if (dwarf_globname (globals[i], &name, &dd_error) == DW_DLV_OK) {
+            TRACE ("-- %s\n", name);
+            dwarf_dealloc (dd, name, DW_DLA_STRING);
+            name = NULL;
+        }
+    }
+#endif /* ERIS_TRACE > 0 */
+
     ErisLibrary *e = lua_newuserdata (L, sizeof (ErisLibrary));
     e->fd = fd;
     e->dd = dd;
     e->dl = dl;
+    e->globals = globals;
+    e->num_globals = num_globals;
 
     if (!find_library_base_address (e)) {
         dwarf_finish (dd, &dd_error);
