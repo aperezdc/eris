@@ -65,6 +65,8 @@ typedef struct {
     ErisLibrary *library; /* Link back to the library. */
     void        *address;
     char        *name;
+
+    Dwarf_Die    dd_die;
 } ErisFunction;
 
 
@@ -189,6 +191,10 @@ eris_function_gc (lua_State *L)
 {
     ErisFunction *f = to_eris_function (L);
     TRACE ("%p (%p:%s)\n", f, f->library, f->name);
+
+    dwarf_dealloc (f->library->dd, f->dd_die, DW_DLA_DIE);
+    f->dd_die = 0;
+
     free (f->name);
     return 0;
 }
@@ -372,6 +378,50 @@ find_library_base_address (ErisLibrary *e)
 static bool
 lookup_function_info (ErisFunction *f)
 {
-    /* TODO: Implement. */
-    return true;
+    /*
+     * TODO: This performs a linear search. Try to find an alternative way,
+     * e.g. using the (optional) DWARF information that correlates entry point
+     * addresses with their corresponding DIEs.
+     *
+     * FIXME: This will pick also variables, when only functions should be
+     * handled. Maybe it will be good to factor the search code to a different
+     * function that then is called from lookup_{function,variable}_info().
+     */
+    for (Dwarf_Signed i = 0; i < f->library->num_globals; i++) {
+        char *global_name;
+        Dwarf_Error dd_error;
+        if (dwarf_globname (f->library->globals[i],
+                            &global_name,
+                            &dd_error) != DW_DLV_OK) {
+            /* Skip over malformed (?) entries. */
+            continue;
+        }
+        const bool found = (strcmp (global_name, f->name) == 0);
+        dwarf_dealloc (f->library->dd, global_name, DW_DLA_STRING);
+        global_name = NULL;
+
+        if (found) {
+            Dwarf_Error dd_error;
+            Dwarf_Off dd_offset;
+
+            if (dwarf_global_die_offset (f->library->globals[i],
+                                         &dd_offset,
+                                         &dd_error) != DW_DLV_OK) {
+                /* TODO: Print Dwarf_Error to trace log. */
+                TRACE ("could not obtain DIE offset\n");
+                return false;
+            }
+            if (dwarf_offdie (f->library->dd,
+                              dd_offset,
+                              &f->dd_die,
+                              &dd_error) != DW_DLV_OK) {
+                /* TODO: Print Dwarf_Error to trace log. */
+                TRACE ("could not obtain DIE\n");
+                return false;
+            }
+            return true;
+        }
+    }
+
+    return false;
 }
