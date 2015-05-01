@@ -102,12 +102,18 @@ $obj/eris-module.o | $obj/eris
   ldflags = $ldflags -shared
   libs = $libs -lelf -ldwarf
 
+build $obj/testutil-module.o : cc testutil-module.c
+build $obj/testutil.so : ld $
+$obj/testutil-module.o | $obj/eris
+  ldflags = $ldflags -shared
+
 build $obj/libtest.o : cc libtest.c
 build $obj/libtest.so : ld $obj/libtest.o
   ldflags = $ldflags -shared
 
 build all : phony $
 $obj/libtest.so $
+$obj/testutil.so $
 $obj/eris.so $
 $obj/eris
 

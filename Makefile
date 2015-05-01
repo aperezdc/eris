@@ -48,6 +48,10 @@ LUA_OBJS := $(patsubst %.c,${OUT}/%.o,${LUA_SRCS})
 ERIS_MODULE_SRCS := eris-module.c eris-trace.c
 ERIS_MODULE_OBJS := $(patsubst %.c,${OUT}/%.o,${ERIS_MODULE_SRCS})
 
+# Testutil module source.
+TESTUTIL_MODULE_SRCS := testutil-module.c
+TESTUTIL_MODULE_OBJS := $(patsubst %.c,${OUT}/%.o,${TESTUTIL_MODULE_SRCS})
+
 
 ${OUT}/%.o: %.c
 	$P Compile $@
@@ -62,15 +66,15 @@ ${OUT}/%:
 
 all: ${OUT}/eris \
 	 ${OUT}/eris.so \
+	 ${OUT}/testutil.so \
 	 ${OUT}/libtest.so
 	$(if ${MAKE_TERMOUT},$Q echo)
 
 clean:
-	$P Clean
 	$Q ${RM} ${OUT}/eris ${LUA_OBJS}
 	$Q ${RM} ${OUT}/eris.so ${ERIS_MODULE_OBJS}
+	$Q ${RM} ${OUT}/testutil.so ${TESTUTIL_MODULE_OBJS}
 	$Q ${RM} ${OUT}/libtest.so ${OUT}/libtest.o
-	$(if ${MAKE_TERMOUT},$Q echo)
 
 ${OUT}/eris: ${LUA_OBJS}
 ${OUT}/eris: LDLIBS += -lm
@@ -78,6 +82,9 @@ ${OUT}/eris: LDLIBS += -lm
 ${OUT}/eris.so: ${ERIS_MODULE_OBJS}
 ${OUT}/eris.so: LDFLAGS += -shared
 ${OUT}/eris.so: LDLIBS += -ldwarf -lelf
+
+${OUT}/testutil.so: ${TESTUTIL_MODULE_OBJS}
+${OUT}/testutil.so: LDFLAGS += -shared
 
 ${OUT}/libtest.so: ${OUT}/libtest.o
 ${OUT}/libtest.so: LDFLAGS += -shared
