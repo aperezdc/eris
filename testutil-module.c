@@ -58,9 +58,10 @@ testutil_waitpid (lua_State *L)
 static int
 testutil_listdir (lua_State *L)
 {
-    DIR *d = opendir (luaL_checkstring (L, 1));
+    const char *path = luaL_checkstring (L, 1);
+    DIR *d = opendir (path);
     if (d == NULL) {
-        return luaL_error (L, "%s", strerror (errno));
+        return luaL_error (L, "%s: %s", path, strerror (errno));
     }
 
     int index = 0;
