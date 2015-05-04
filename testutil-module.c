@@ -32,7 +32,12 @@ testutil_isatty (lua_State *L)
 static int
 testutil_fork (lua_State *L)
 {
-    lua_pushinteger (L, (lua_Integer) fork ());
+    pid_t result = fork ();
+    if (result == 0) {
+        lua_pushnil (L);
+    } else {
+        lua_pushinteger (L, (lua_Integer) result);
+    }
     return 1;
 }
 
