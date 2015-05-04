@@ -68,6 +68,12 @@ testutil_listdir (lua_State *L)
 
     lua_newtable (L); /* Stack: Table */
     while ((de = readdir (d)) != NULL) {
+        /* Skip "." and ".." entries. */
+        if (de->d_name[0] == '.' &&
+            (de->d_name[1] == '\0' ||
+             (de->d_name[1] == '.' && de->d_name[2] == '\0'))) {
+            continue;
+        }
         lua_pushstring (L, de->d_name); /* Stack: Table Filename */
         lua_rawseti (L, -2, ++index);   /* Stack: Table */
     }
