@@ -10,7 +10,9 @@
 
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <dirent.h>
 #include <unistd.h>
+#include <string.h>
 #include <errno.h>
 
 
@@ -53,10 +55,33 @@ testutil_waitpid (lua_State *L)
 }
 
 
+static int
+testutil_listdir (lua_State *L)
+{
+    DIR *d = opendir (luaL_checkstring (L, 1));
+    if (d == NULL) {
+        return luaL_error (L, "%s", strerror (errno));
+    }
+
+    int index = 0;
+    struct dirent *de = NULL;
+
+    lua_newtable (L); /* Stack: Table */
+    while ((de = readdir (d)) != NULL) {
+        lua_pushstring (L, de->d_name); /* Stack: Table Filename */
+        lua_rawseti (L, -2, ++index);   /* Stack: Table */
+    }
+    closedir (d);
+
+    return 1;
+}
+
+
 static const luaL_Reg testutillib[] = {
     { "isatty",  testutil_isatty  },
     { "fork",    testutil_fork    },
     { "waitpid", testutil_waitpid },
+    { "listdir", testutil_listdir },
     { NULL, NULL }
 };
 
