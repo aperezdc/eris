@@ -1,0 +1,25 @@
+#! /bin/sh
+#
+# run-tests
+# Copyright (C) 2015 Adrian Perez <aperez@igalia.com>
+#
+# Distributed under terms of the MIT license.
+#
+
+# Obtain the working directory and the directory where this scripts resides,
+# which then can be used to find the test harness and the needed binaries.
+curdir=$(pwd)
+cd "$(dirname "$0")"
+erisdir=$(pwd)
+
+if ! [ -r build.conf ] ; then
+	echo "build.conf not found. Have you run ./configure?" 1>&2
+	exit 1
+fi
+
+objdir=$(sed -e 's/^obj[[:space:]]*=[[:space:]]*\(.*\)$/\1/p' -e 'd' build.conf)
+cd "${objdir}"
+objdir=$(pwd)
+
+export LUA_INIT="@${erisdir}/assertions.lua"
+exec "./eris" "${erisdir}/harness.lua" "${erisdir}" "${curdir}" "$@"

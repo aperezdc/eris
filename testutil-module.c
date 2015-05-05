@@ -30,41 +30,6 @@ testutil_isatty (lua_State *L)
 
 
 static int
-testutil_fork (lua_State *L)
-{
-    pid_t result = fork ();
-    if (result == 0) {
-        lua_pushnil (L);
-    } else {
-        lua_pushinteger (L, (lua_Integer) result);
-    }
-    return 1;
-}
-
-
-static int
-testutil_waitpid (lua_State *L)
-{
-    int status;
-    pid_t pid = waitpid ((pid_t) luaL_checkinteger (L, 1), &status, 0);
-
-    if (WIFEXITED (status)) {
-        lua_pushstring (L, "exit");
-        lua_pushinteger (L, WEXITSTATUS (status));
-    } else if (WIFSIGNALED (status)) {
-        lua_pushstring (L, "signal");
-        lua_pushinteger (L, WTERMSIG (status));
-    } else {
-        lua_pushnil (L);
-        lua_pushnil (L);
-    }
-
-    lua_pushinteger (L, (lua_Integer) pid);
-    return 3;
-}
-
-
-static int
 testutil_listdir (lua_State *L)
 {
     const char *path = luaL_checkstring (L, 1);
@@ -140,8 +105,6 @@ testutil_isdir (lua_State *L)
 
 static const luaL_Reg testutillib[] = {
     { "isatty",   testutil_isatty   },
-    { "fork",     testutil_fork     },
-    { "waitpid",  testutil_waitpid  },
     { "listdir",  testutil_listdir  },
     { "realpath", testutil_realpath },
     { "isfile",   testutil_isfile   },
