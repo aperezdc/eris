@@ -136,6 +136,9 @@ function TAPOutput:finish(test)
 	if test.status == "success" then
 		self.succeeded[#self.succeeded + 1] = test
 		printf(self.success, self.counter, test.name)
+		if options.verbose and test.output ~= nil and #test.output > 0 then
+			printf("# %s\n", test.output:gsub("\n", "\n# "))
+		end
 	elseif test.status == "failure" then
 		self.failed[#self.failed + 1] = test
 		printf(self.failure, self.counter, test.name)
@@ -144,8 +147,9 @@ function TAPOutput:finish(test)
 		else
 			verbose("# Exited with code %i, output:\n", test.exitcode)
 		end
-		if test.output ~= nil then
-			verbose("# %s\n", test.output:gsub("\n", "\n# "))
+		-- Output of failed tests is always written.
+		if test.output ~= nil and #test.output > 0 then
+			printf("# %s\n", test.output:gsub("\n", "\n# "))
 		else
 			verbose("# (no output)\n")
 		end
