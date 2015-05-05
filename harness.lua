@@ -14,13 +14,15 @@ Usage: harness.lua <eris-dir> <output-dir> [options]
 This script assumes that it is being run from the build output directory.
 Options:
 
-  --output=FORMAT   Output format (default: tap).
+  --output=FORMAT   Output format (default: auto).
   --verbose         Print additional messages.
   --help            Display this help message.
 
 Output formats:
 
+  uterm    UTF-8 terminal supporting ANSI color codes.
   tap      Test Anything Protocol (http://www.testanything.org)
+  auto     Use "uterm" when outputting to a terminal, "tap" otherwise.
 
 ]]
 
@@ -33,7 +35,7 @@ end
 
 local tests = {}
 local options = {
-	output  = "tap",
+	output  = "auto",
 	verbose = false,
 }
 
@@ -114,33 +116,60 @@ local object = {
 }
 
 
-local TAPOutput = object:clone {
+local BaseOutput = object:clone()
+
+function BaseOutput:setup(tests)
+	self.succeeded = {}
+	self.failed = {}
+	self.skipped = {}
+end
+
+function BaseOutput:start(test)
+	-- No-op
+end
+
+function BaseOutput:finish(test)
+	if test.status == "success" then
+		self.succeeded[#self.succeeded + 1] = test
+	elseif test.status == "failure" then
+		self.failed[#self.failed + 1] = test
+	elseif test.status == "skip" then
+		self.skipped[#self.skipped + 1] = test
+	else
+		assert(false, "invalid status")
+	end
+end
+
+function BaseOutput:report()
+	-- No-op
+end
+
+
+local TAPOutput = BaseOutput:clone {
 	success = "ok %u - %s\n",
 	skip    = "ok %u - # SKIP %s\n",
 	failure = "not ok %u - %s\n",
 }
 
 function TAPOutput:setup(tests)
+	self:prototype().setup(self, tests)
 	self.counter = 0
-	self.succeeded = {}
-	self.failed = {}
-	self.skipped = {}
 	printf("1..%u\n", #tests)
 end
 
 function TAPOutput:start(test)
+	self:prototype().start(self, test)
 end
 
 function TAPOutput:finish(test)
+	self:prototype().finish(self, test)
 	self.counter = self.counter + 1
 	if test.status == "success" then
-		self.succeeded[#self.succeeded + 1] = test
 		printf(self.success, self.counter, test.name)
 		if options.verbose and test.output ~= nil and #test.output > 0 then
 			printf("# %s\n", test.output:gsub("\n", "\n# "))
 		end
 	elseif test.status == "failure" then
-		self.failed[#self.failed + 1] = test
 		printf(self.failure, self.counter, test.name)
 		if test.signal then
 			verbose("# Exited due to signal %s, output:\n", test.exitcode)
@@ -154,15 +183,156 @@ function TAPOutput:finish(test)
 			verbose("# (no output)\n")
 		end
 	elseif test.status == "skip" then
-		self.skipped[#self.skipped + 1] = test
 		printf(self.skip, self.counter, test.name)
 	else
 		assert(false, "invalid status")
 	end
 end
 
+
+local CSI_data = {
+	-- Formats for character attributes.
+	F_normal   = "[%um%s[0;0m",
+	F_bold     = "[1;%um%s[0;0m",
+
+	-- Formats for cursor movement.
+	M_up       = "[%uA",
+	M_down     = "[%uB",
+	M_right    = "[%uC",
+	M_left     = "[%uD",
+	M_column   = "[%uG",
+
+	-- Color constants.
+	C_black    = 30,
+	C_red      = 31,
+	C_green    = 32,
+	C_brown    = 33,
+	C_blue     = 34,
+	C_magenta  = 35,
+	C_cyan     = 36,
+	C_white    = 37,
+
+	-- Actions which do not require parameters.
+	erase      = "[K",
+	eraseline  = "[2K",
+	savepos    = "[s",
+	restorepos = "[u",
+}
+
+local CSI = setmetatable({}, { __index = CSI_data })
+for k, v in pairs(CSI_data) do
+	local function make_movement_func(format, move)
+		return function (n)
+			return format:format(n)
+		end
+	end
+
+	if k:sub(0, 2) == "C_" then
+		k = k:sub(3)
+		CSI[k] = function (txt)
+			return CSI_data.F_normal:format(v, txt)
+		end
+		CSI[k .. "bg"] = function (txt)
+			return CSI_data.F_normal:format(v + 10, txt)
+		end
+		CSI["bold" .. k] = function (txt)
+			return CSI_data.F_bold:format(v, txt)
+		end
+		CSI["bold" .. k .. "bg"] = function (txt)
+			return CSI_data.F_bold:format(v + 10, txt)
+		end
+	elseif k:sub(0, 2) == "M_" then
+		k = k:sub(3)
+		CSI[k] = make_movement_func(v, k)
+	end
+end
+
+
+local Utf8TermOutput = BaseOutput:clone {
+	dot_success = CSI.boldgreen "●",
+	dot_failure = CSI.boldred   "◼",
+	dot_skip    = CSI.boldbrown "✱",
+	dot_pending = CSI.boldcyan  "◌",
+}
+
+function Utf8TermOutput:setup(tests)
+	self:prototype().setup(self, tests)
+	self.counter = 0
+	self.total = #tests
+end
+
+function Utf8TermOutput:start(test)
+	self:prototype().start(self, test)
+	self.counter = self.counter + 1
+	local progress = CSI.boldblue(("[%u/%u]"):format(self.counter, self.total))
+	printf("%s%s %s %s%s", CSI.column(2), self.dot_pending,
+		test.name, progress, CSI.erase)
+	io.stdout:flush()
+end
+
+function Utf8TermOutput:finish(test)
+	self:prototype().finish(self, test)
+	local statusdot = self["dot_" .. test.status]
+	printf("%s%s%s%s%s", CSI.savepos, CSI.column(2),
+		statusdot, CSI.restorepos, CSI.erase)
+	if test.status ~= "success" then
+		printf("\n")
+		if test.status == "failure" and test.output ~= nil and #test.output > 0 then
+			printf("%s", CSI.white(test.output))
+		end
+	end
+	io.stdout:flush()
+end
+
+function Utf8TermOutput:report()
+	self:prototype().report(self)
+	if #self.failed > 0 or #self.skipped > 0 then
+		printf("\n")
+	else
+		printf("%s%s", CSI.column(1), CSI.erase)
+	end
+	if options.verbose and #self.failed > 0 then
+		printf("Failed tests:\n")
+		for _, test in ipairs(self.failed) do
+			printf("  %s\n", CSI.red(test.name))
+		end
+		printf("\n")
+	end
+	printf(" %s %u  %s %u  %s %u\n",
+		self.dot_success, #self.succeeded,
+		self.dot_skip,    #self.skipped,
+		self.dot_failure, #self.failed)
+end
+
+
 -- Pick the output format
-local outputs = { tap = TAPOutput }
+local outputs = { tap = TAPOutput, uterm = Utf8TermOutput }
+local supports_uterm = { "xterm", "uxterm", "screen", "st", "tmux" }
+function detect_uterm()
+	if not tu.isatty(io.stdout) then
+		return false
+	end
+
+	local term = os.getenv("TERM")
+	if term == nil or #term == 0 then
+		return false
+	end
+
+	for _, t in ipairs(supports_uterm) do
+		if term == t then
+			return true
+		end
+		if term:sub(0, #t + 1) == t .. "-" then
+			return true
+		end
+	end
+	return false
+end
+
+if options.output == "auto" then
+	options.output = detect_uterm() and "uterm" or "tap"
+end
+
 local output = outputs[options.output]
 if output == nil then
 	io.stderr:write("Invalid output format: " .. options.output .. "\n")
@@ -228,3 +398,4 @@ for i, test in ipairs(tests) do
 	end
 	output:finish(test)
 end
+output:report()
