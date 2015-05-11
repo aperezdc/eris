@@ -12,3 +12,7 @@ assert.Field(libtest, "lookup")
 
 local add = libtest:lookup("add")
 assert.Callable(add)
+
+local intvar = libtest:lookup("intvar")
+print(intvar)
+assert.Not.Nil(intvar)

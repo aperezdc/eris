@@ -5,6 +5,10 @@
  * Distributed under terms of the MIT license.
  */
 
+
+int intvar = 42;
+
+
 int
 add (int a, int b)
 {
