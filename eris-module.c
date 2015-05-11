@@ -55,6 +55,7 @@ to_eris_library (lua_State *L)
 
 
 static bool find_library_base_address (ErisLibrary *e);
+static Dwarf_Die lookup_die (ErisLibrary *e, const void *address, const char *name);
 
 
 /*
@@ -78,9 +79,6 @@ to_eris_function (lua_State *L)
 {
     return (ErisFunction*) luaL_checkudata (L, 1, ERIS_FUNCTION);
 }
-
-
-static bool lookup_function_info (ErisFunction *f);
 
 
 static bool
@@ -161,15 +159,19 @@ eris_library_lookup (lua_State *L)
         return 2;
     }
 
+    Dwarf_Die dd_die = lookup_die (e, address, name);
+    if (!dd_die) {
+        return luaL_error (L, "could not look up DWARF debug information "
+                           "for symbol '%s' (library %p)", name, e);
+    }
+
     /* Find the DIEs needed to generate a wrapper for the symbol. */
     ErisFunction *f = lua_newuserdata (L, sizeof (ErisFunction));
     f->library = e;
     f->name = strdup (name);
     f->address = address;
-    if (!lookup_function_info (f)) {
-        return luaL_error (L, "could not look up DWARF information for "
-                           "symbol '%s' (library %p)", name, e);
-    }
+    f->dd_die = dd_die;
+    f->kind = SYMBOL_UNKNOWN;
     luaL_setmetatable (L, ERIS_FUNCTION);
     TRACE ("new ErisFunction* at %p (%p:%s)\n",
            f, f->library, f->name);
@@ -375,53 +377,54 @@ find_library_base_address (ErisLibrary *e)
 #endif /* ERIS_USE_LINK_H */
 
 
-static bool
-lookup_function_info (ErisFunction *f)
+static Dwarf_Die
+lookup_die (ErisLibrary *library,
+            const void  *address,
+            const char  *name)
 {
     /*
      * TODO: This performs a linear search. Try to find an alternative way,
      * e.g. using the (optional) DWARF information that correlates entry point
      * addresses with their corresponding DIEs.
-     *
-     * FIXME: This will pick also variables, when only functions should be
-     * handled. Maybe it will be good to factor the search code to a different
-     * function that then is called from lookup_{function,variable}_info().
      */
-    for (Dwarf_Signed i = 0; i < f->library->num_globals; i++) {
+    for (Dwarf_Signed i = 0; i < library->num_globals; i++) {
         char *global_name;
         Dwarf_Error dd_error;
-        if (dwarf_globname (f->library->globals[i],
+        if (dwarf_globname (library->globals[i],
                             &global_name,
                             &dd_error) != DW_DLV_OK) {
-            /* Skip over malformed (?) entries. */
+            TRACE ("skipped malformed global at index %i\n", (int) i);
             continue;
         }
-        const bool found = (strcmp (global_name, f->name) == 0);
-        dwarf_dealloc (f->library->dd, global_name, DW_DLA_STRING);
+
+        const bool found = (strcmp (global_name, name) == 0);
+        dwarf_dealloc (library->dd, global_name, DW_DLA_STRING);
         global_name = NULL;
 
         if (found) {
             Dwarf_Error dd_error;
             Dwarf_Off dd_offset;
 
-            if (dwarf_global_die_offset (f->library->globals[i],
+            if (dwarf_global_die_offset (library->globals[i],
                                          &dd_offset,
                                          &dd_error) != DW_DLV_OK) {
                 /* TODO: Print Dwarf_Error to trace log. */
                 TRACE ("could not obtain DIE offset\n");
-                return false;
+                return NULL;
             }
-            if (dwarf_offdie (f->library->dd,
+
+            Dwarf_Die dd_die;
+            if (dwarf_offdie (library->dd,
                               dd_offset,
-                              &f->dd_die,
+                              &dd_die,
                               &dd_error) != DW_DLV_OK) {
                 /* TODO: Print Dwarf_Error to trace log. */
                 TRACE ("could not obtain DIE\n");
-                return false;
+                return NULL;
             }
-            return true;
+            return dd_die;
         }
     }
 
-    return false;
+    return NULL;
 }
