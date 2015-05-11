@@ -135,6 +135,20 @@ Steps.Fields = {
 }
 Steps.Field = Steps.Fields
 
+local function make_type_checker(typename)
+	return {
+		message = "value of type '" .. typename .. "'",
+		apply = function (self, _, obj)
+			return self.message, type(obj) == typename
+		end
+	}
+end
+
+for _, name in ipairs { "String", "Nil", "Number", "Function" } do
+	Steps[name] = make_type_checker(name:lower())
+end
+make_type_checker = nil
+
 
 _G.assert = setmetatable({}, {
 	__index = function (table, key)
