@@ -145,14 +145,28 @@ local function make_type_checker(typename)
 end
 
 local typenames = {
+	-- Userdata is handled a bit differently, see below.
 	"Nil", "Number", "String", "Boolean",
-	"Table", "Function", "Thread", "Userdata",
+	"Table", "Function", "Thread",
 }
 for _, name in ipairs(typenames) do
 	Steps[name] = make_type_checker(name:lower())
 end
 make_type_checker = nil
 typenames = nil
+
+Steps.Userdata = {
+	message = "value of type 'userdata'",
+	apply = function (self, _, obj, udatatype)
+		if udatatype == nil then
+			return self.message, type(obj) == "userdata"
+		else
+			local m = getmetatable(obj)
+			local r = m ~= nil and m.__name == udatatype
+			return self.message .. " with metatable '" .. udatatype .. "'", r
+		end
+	end
+}
 
 
 _G.assert = setmetatable({}, {

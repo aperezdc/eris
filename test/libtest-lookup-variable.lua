@@ -12,5 +12,5 @@ assert.Field(libtest, "lookup")
 
 local intvar = libtest:lookup("intvar")
 assert.Not.Nil(intvar)
-assert.Userdata(intvar)
+assert.Userdata(intvar, "org.perezdecastro.eris.Variable")
 assert.Not.Callable(intvar)

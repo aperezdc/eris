@@ -12,5 +12,5 @@ assert.Field(libtest, "lookup")
 
 local add = libtest:lookup("add")
 assert.Not.Nil(add)
-assert.Userdata(add)
+assert.Userdata(add, "org.perezdecastro.eris.Function")
 assert.Callable(add)
