@@ -36,12 +36,12 @@
  */
 typedef struct {
     int           fd;
-    Dwarf_Debug   dd;
     void         *dl;
     intptr_t      dl_diff;
 
-    Dwarf_Global *globals;
-    Dwarf_Signed  num_globals;
+    Dwarf_Debug   d_debug;
+    Dwarf_Global *d_globals;
+    Dwarf_Signed  d_num_globals;
 } ErisLibrary;
 
 
@@ -55,8 +55,8 @@ to_eris_library (lua_State *L)
 }
 
 
-static bool find_library_base_address (ErisLibrary *e);
-static Dwarf_Die lookup_die (ErisLibrary *e, const void *address, const char *name);
+static bool find_library_base_address (ErisLibrary *el);
+static Dwarf_Die lookup_die (ErisLibrary *el, const void *address, const char *name);
 
 
 /*
@@ -81,7 +81,7 @@ typedef struct {
 
 typedef struct {
     ERIS_COMMON_FIELDS;
-    Dwarf_Die dd_die;
+    Dwarf_Die d_die;
 } ErisFunction;
 
 typedef struct {
@@ -140,18 +140,18 @@ find_library (const char *name, char path[PATH_MAX])
 static int
 eris_library_gc (lua_State *L)
 {
-    ErisLibrary *e = to_eris_library (L);
-    TRACE ("%p\n", e);
+    ErisLibrary *el = to_eris_library (L);
+    TRACE ("%p\n", el);
 
-    if (e->globals) {
-        dwarf_globals_dealloc (e->dd, e->globals, e->num_globals);
+    if (el->d_globals) {
+        dwarf_globals_dealloc (el->d_debug, el->d_globals, el->d_num_globals);
     }
 
-    Dwarf_Error dd_error;
-    dwarf_finish (e->dd, &dd_error);
+    Dwarf_Error d_error;
+    dwarf_finish (el->d_debug, &d_error);
 
-    close (e->fd);
-    dlclose (e->dl);
+    close (el->fd);
+    dlclose (el->dl);
 
     return 0;
 }
@@ -160,9 +160,9 @@ eris_library_gc (lua_State *L)
 static int
 eris_library_tostring (lua_State *L)
 {
-    ErisLibrary *e = to_eris_library (L);
-    if (e->dd) {
-        lua_pushfstring (L, "eris.library (%p)", e->dd);
+    ErisLibrary *el = to_eris_library (L);
+    if (el->d_debug) {
+        lua_pushfstring (L, "eris.library (%p)", el->d_debug);
     } else {
         lua_pushliteral (L, "eris.library (closed)");
     }
@@ -191,7 +191,7 @@ eris_symbol_free (ErisSymbol *symbol)
 
 
 static int
-make_function_wrapper (lua_State *L,
+make_function_wrapper (lua_State   *L,
                        ErisLibrary *library,
                        void        *address,
                        const char  *name,
@@ -200,7 +200,7 @@ make_function_wrapper (lua_State *L,
 {
     ErisFunction *ef = lua_newuserdata (L, sizeof (ErisFunction));
     eris_symbol_init ((ErisSymbol*) ef, library, address, name);
-    ef->dd_die = d_die;
+    ef->d_die = d_die;
     luaL_setmetatable (L, ERIS_FUNCTION);
     TRACE ("new ErisFunction* at %p (%p:%s)\n", ef, library, name);
     return 1;
@@ -220,7 +220,7 @@ make_variable_wrapper (lua_State   *L,
     luaL_setmetatable (L, ERIS_VARIABLE);
     TRACE ("new ErisVariable* at %p (%p:%s)\n", ev, library, name);
     /* The DIE is unneeded from this point onwards. */
-    dwarf_dealloc (library->dd, d_die, DW_DLA_DIE);
+    dwarf_dealloc (library->d_debug, d_die, DW_DLA_DIE);
     return 1;
 }
 
@@ -239,22 +239,22 @@ eris_library_lookup (lua_State *L)
         goto return_error;
     }
 
-    Dwarf_Die dd_die = lookup_die (e, address, name);
-    if (!dd_die) {
+    Dwarf_Die d_die = lookup_die (e, address, name);
+    if (!d_die) {
         return luaL_error (L, "could not look up DWARF debug information "
                            "for symbol '%s' (library %p)", name, e);
     }
 
-    Dwarf_Half dd_tag;
-    Dwarf_Error dd_error = 0;
-    if (dwarf_tag (dd_die,
-                   &dd_tag,
-                   &dd_error) != DW_DLV_OK) {
+    Dwarf_Half d_tag;
+    Dwarf_Error d_error = 0;
+    if (dwarf_tag (d_die,
+                   &d_tag,
+                   &d_error) != DW_DLV_OK) {
         return luaL_error (L, "could not obtain DWARF debug information tag "
                            "for symbol '%s' (library %p)", name, e);
     }
 
-    switch (dd_tag) {
+    switch (d_tag) {
         case DW_TAG_reference_type:
             /* TODO: Implement dereferencing of references. */
             return luaL_error (L, "DW_TAG_reference_type: unimplemented");
@@ -262,17 +262,17 @@ eris_library_lookup (lua_State *L)
         case DW_TAG_inlined_subroutine: /* TODO: Check whether inlines work. */
         case DW_TAG_entry_point:
         case DW_TAG_subprogram:
-            return make_function_wrapper (L, e, address, name, dd_die, dd_tag);
+            return make_function_wrapper (L, e, address, name, d_die, d_tag);
 
         case DW_TAG_variable:
-            return make_variable_wrapper (L, e, address, name, dd_die, dd_tag);
+            return make_variable_wrapper (L, e, address, name, d_die, d_tag);
 
         default:
             error = "unsupported debug info kind (not function or data)";
             /* fall-through */
     }
 
-    dwarf_dealloc (e->dd, dd_die, DW_DLA_DIE);
+    dwarf_dealloc (e->d_debug, d_die, DW_DLA_DIE);
 return_error:
     lua_pushnil (L);
     lua_pushstring (L, error);
@@ -283,8 +283,8 @@ return_error:
 static int
 eris_function_call (lua_State *L)
 {
-    ErisFunction *f = to_eris_function (L);
-    TRACE ("%p (%p:%s)\n", f, f->library, f->name);
+    ErisFunction *ef = to_eris_function (L);
+    TRACE ("%p (%p:%s)\n", ef, ef->library, ef->name);
     return 0;
 }
 
@@ -292,13 +292,13 @@ eris_function_call (lua_State *L)
 static int
 eris_function_gc (lua_State *L)
 {
-    ErisFunction *f = to_eris_function (L);
-    TRACE ("%p (%p:%s)\n", f, f->library, f->name);
+    ErisFunction *ef = to_eris_function (L);
+    TRACE ("%p (%p:%s)\n", ef, ef->library, ef->name);
 
-    dwarf_dealloc (f->library->dd, f->dd_die, DW_DLA_DIE);
-    f->dd_die = 0;
+    dwarf_dealloc (ef->library->d_debug, ef->d_die, DW_DLA_DIE);
+    ef->d_die = 0;
 
-    eris_symbol_free ((ErisSymbol*) f);
+    eris_symbol_free ((ErisSymbol*) ef);
     return 0;
 }
 
@@ -306,8 +306,8 @@ eris_function_gc (lua_State *L)
 static int
 eris_function_tostring (lua_State *L)
 {
-    ErisFunction *f = to_eris_function (L);
-    lua_pushfstring (L, "eris.function (%p:%s)", f->library, f->name);
+    ErisFunction *ef = to_eris_function (L);
+    lua_pushfstring (L, "eris.function (%p:%s)", ef->library, ef->name);
     return 1;
 }
 
@@ -404,53 +404,56 @@ eris_load (lua_State *L)
                            path, strerror (errno));
     }
 
-    Dwarf_Handler dd_error_handler = 0;
-    Dwarf_Ptr dd_error_argument = 0;
-    Dwarf_Error dd_error;
-    Dwarf_Debug dd;
+    Dwarf_Handler d_error_handler = 0;
+    Dwarf_Ptr d_error_argument = 0;
+    Dwarf_Error d_error;
+    Dwarf_Debug d_debug;
 
-    if (dwarf_init (fd, DW_DLC_READ,
-                    dd_error_handler, dd_error_argument,
-                    &dd, &dd_error) != DW_DLV_OK) {
+    if (dwarf_init (fd,
+                    DW_DLC_READ,
+                    d_error_handler,
+                    d_error_argument,
+                    &d_debug,
+                    &d_error) != DW_DLV_OK) {
         close (fd);
         dlclose (dl);
         return luaL_error (L, "error reading debug information from '%s' (%s)",
-                           path, dwarf_errmsg (dd_error));
+                           path, dwarf_errmsg (d_error));
     }
 
-    Dwarf_Signed num_globals = 0;
-    Dwarf_Global *globals = NULL;
-    if (dwarf_get_globals (dd,
-                           &globals,
-                           &num_globals,
-                           &dd_error) != DW_DLV_OK) {
-        dwarf_finish (dd, &dd_error);
+    Dwarf_Signed d_num_globals = 0;
+    Dwarf_Global *d_globals = NULL;
+    if (dwarf_get_globals (d_debug,
+                           &d_globals,
+                           &d_num_globals,
+                           &d_error) != DW_DLV_OK) {
+        dwarf_finish (d_debug, &d_error);
         close (fd);
         dlclose (dl);
         /* TODO: Provide a better error message. */
         return luaL_error (L, "cannot read globals");
     }
-    TRACE ("found %ld globals\n", (long) num_globals);
+    TRACE ("found %ld globals\n", (long) d_num_globals);
 #if defined(ERIS_TRACE) && ERIS_TRACE > 0
-    for (Dwarf_Signed i = 0; i < num_globals; i++) {
+    for (Dwarf_Signed i = 0; i < d_num_globals; i++) {
         char *name = NULL;
-        if (dwarf_globname (globals[i], &name, &dd_error) == DW_DLV_OK) {
+        if (dwarf_globname (d_globals[i], &name, &d_error) == DW_DLV_OK) {
             TRACE ("-- %s\n", name);
-            dwarf_dealloc (dd, name, DW_DLA_STRING);
+            dwarf_dealloc (d_debug, name, DW_DLA_STRING);
             name = NULL;
         }
     }
 #endif /* ERIS_TRACE > 0 */
 
-    ErisLibrary *e = lua_newuserdata (L, sizeof (ErisLibrary));
-    e->fd = fd;
-    e->dd = dd;
-    e->dl = dl;
-    e->globals = globals;
-    e->num_globals = num_globals;
+    ErisLibrary *el = lua_newuserdata (L, sizeof (ErisLibrary));
+    el->fd = fd;
+    el->dl = dl;
+    el->d_debug = d_debug;
+    el->d_globals = d_globals;
+    el->d_num_globals = d_num_globals;
 
-    if (!find_library_base_address (e)) {
-        dwarf_finish (dd, &dd_error);
+    if (!find_library_base_address (el)) {
+        dwarf_finish (d_debug, &d_error);
         close (fd);
         dlclose (dl);
 #ifdef ERIS_USE_LINK_H
@@ -462,7 +465,7 @@ eris_load (lua_State *L)
     }
 
     luaL_setmetatable (L, ERIS_LIBRARY);
-    TRACE ("new ErisLibrary* at %p\n", e);
+    TRACE ("new ErisLibrary* at %p\n", el);
     return 1;
 }
 
@@ -492,14 +495,14 @@ luaopen_eris (lua_State *L)
 # include <link.h>
 
 static bool
-find_library_base_address (ErisLibrary *e)
+find_library_base_address (ErisLibrary *el)
 {
     struct link_map *map = NULL;
-    if (dlinfo (e->dl, RTLD_DI_LINKMAP, &map) != 0) {
+    if (dlinfo (el->dl, RTLD_DI_LINKMAP, &map) != 0) {
         return false;
     }
-    e->dl_diff = map->l_addr;
-    TRACE ("diff = %#llx (link_map)\n", (long long) e->dl_diff);
+    el->dl_diff = map->l_addr;
+    TRACE ("diff = %#llx (link_map)\n", (long long) el->dl_diff);
     return true;
 }
 
@@ -509,7 +512,7 @@ find_library_base_address (ErisLibrary *e)
 
 
 static Dwarf_Die
-lookup_die (ErisLibrary *library,
+lookup_die (ErisLibrary *el,
             const void  *address,
             const char  *name)
 {
@@ -518,42 +521,42 @@ lookup_die (ErisLibrary *library,
      * e.g. using the (optional) DWARF information that correlates entry point
      * addresses with their corresponding DIEs.
      */
-    for (Dwarf_Signed i = 0; i < library->num_globals; i++) {
+    for (Dwarf_Signed i = 0; i < el->d_num_globals; i++) {
         char *global_name;
-        Dwarf_Error dd_error;
-        if (dwarf_globname (library->globals[i],
+        Dwarf_Error d_error;
+        if (dwarf_globname (el->d_globals[i],
                             &global_name,
-                            &dd_error) != DW_DLV_OK) {
+                            &d_error) != DW_DLV_OK) {
             TRACE ("skipped malformed global at index %i\n", (int) i);
             continue;
         }
 
         const bool found = (strcmp (global_name, name) == 0);
-        dwarf_dealloc (library->dd, global_name, DW_DLA_STRING);
+        dwarf_dealloc (el->d_debug, global_name, DW_DLA_STRING);
         global_name = NULL;
 
         if (found) {
-            Dwarf_Error dd_error;
-            Dwarf_Off dd_offset;
+            Dwarf_Error d_error;
+            Dwarf_Off d_offset;
 
-            if (dwarf_global_die_offset (library->globals[i],
-                                         &dd_offset,
-                                         &dd_error) != DW_DLV_OK) {
+            if (dwarf_global_die_offset (el->d_globals[i],
+                                         &d_offset,
+                                         &d_error) != DW_DLV_OK) {
                 /* TODO: Print Dwarf_Error to trace log. */
                 TRACE ("could not obtain DIE offset\n");
                 return NULL;
             }
 
-            Dwarf_Die dd_die;
-            if (dwarf_offdie (library->dd,
-                              dd_offset,
-                              &dd_die,
-                              &dd_error) != DW_DLV_OK) {
+            Dwarf_Die d_die;
+            if (dwarf_offdie (el->d_debug,
+                              d_offset,
+                              &d_die,
+                              &d_error) != DW_DLV_OK) {
                 /* TODO: Print Dwarf_Error to trace log. */
                 TRACE ("could not obtain DIE\n");
                 return NULL;
             }
-            return dd_die;
+            return d_die;
         }
     }
 
