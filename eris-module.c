@@ -12,6 +12,7 @@
 #include "eris-util.h"
 
 #include <libdwarf/libdwarf.h>
+#include <libdwarf/dwarf.h>
 #include <libelf.h>
 #include <dlfcn.h>
 #include <sys/types.h>
@@ -59,25 +60,49 @@ static Dwarf_Die lookup_die (ErisLibrary *e, const void *address, const char *na
 
 
 /*
- * Represents a callable function from a library, as returned by
- * "lib:lookup()".
+ * FIXME: This makes ErisVariable/ErisFunction keep a reference to their
+ *        corresponding ErisLibrary, which itself might be GCd while there
+ *        are still live references to it!
+ */
+#define ERIS_COMMON_FIELDS \
+    ErisLibrary *library;  \
+    void        *address;  \
+    char        *name
+
+
+/*
+ * Any structure that uses ERIS_COMMON_FIELDS at its start can be casted to
+ * this struct type.
  */
 typedef struct {
-    ErisLibrary *library; /* Link back to the library. */
-    void        *address;
-    char        *name;
+    ERIS_COMMON_FIELDS;
+} ErisSymbol;
 
-    Dwarf_Die    dd_die;
+
+typedef struct {
+    ERIS_COMMON_FIELDS;
+    Dwarf_Die dd_die;
 } ErisFunction;
+
+typedef struct {
+    ERIS_COMMON_FIELDS;
+} ErisVariable;
 
 
 static const char ERIS_FUNCTION[] = "org.perezdecastro.eris.Function";
+static const char ERIS_VARIABLE[] = "org.perezdecastro.eris.Variable";
 
 
 static inline ErisFunction*
 to_eris_function (lua_State *L)
 {
     return (ErisFunction*) luaL_checkudata (L, 1, ERIS_FUNCTION);
+}
+
+static inline ErisVariable*
+to_eris_variable (lua_State *L)
+{
+    return (ErisVariable*) luaL_checkudata (L, 1, ERIS_VARIABLE);
 }
 
 
@@ -145,18 +170,73 @@ eris_library_tostring (lua_State *L)
 }
 
 
+static inline void
+eris_symbol_init (ErisSymbol  *symbol,
+                  ErisLibrary *library,
+                  void        *address,
+                  const char  *name)
+{
+    symbol->library = library;
+    symbol->name = strdup (name);
+    symbol->address = address;
+}
+
+
+static inline void
+eris_symbol_free (ErisSymbol *symbol)
+{
+    free (symbol->name);
+    memset (symbol, 0x00, sizeof (ErisSymbol));
+}
+
+
+static int
+make_function_wrapper (lua_State *L,
+                       ErisLibrary *library,
+                       void        *address,
+                       const char  *name,
+                       Dwarf_Die    d_die,
+                       Dwarf_Half   d_tag)
+{
+    ErisFunction *ef = lua_newuserdata (L, sizeof (ErisFunction));
+    eris_symbol_init ((ErisSymbol*) ef, library, address, name);
+    ef->dd_die = d_die;
+    luaL_setmetatable (L, ERIS_FUNCTION);
+    TRACE ("new ErisFunction* at %p (%p:%s)\n", ef, library, name);
+    return 1;
+}
+
+
+static int
+make_variable_wrapper (lua_State   *L,
+                       ErisLibrary *library,
+                       void        *address,
+                       const char  *name,
+                       Dwarf_Die    d_die,
+                       Dwarf_Half   d_tag)
+{
+    ErisVariable *ev = lua_newuserdata(L, sizeof (ErisVariable));
+    eris_symbol_init ((ErisSymbol*) ev, library, address, name);
+    luaL_setmetatable (L, ERIS_VARIABLE);
+    TRACE ("new ErisVariable* at %p (%p:%s)\n", ev, library, name);
+    /* The DIE is unneeded from this point onwards. */
+    dwarf_dealloc (library->dd, d_die, DW_DLA_DIE);
+    return 1;
+}
+
+
 static int
 eris_library_lookup (lua_State *L)
 {
     ErisLibrary *e = to_eris_library (L);
     const char *name = luaL_checkstring (L, 2);
+    const char *error = "unknown error";
 
     /* Find the entry point of the function. */
     void *address = dlsym (e->dl, name);
     if (!address) {
-        lua_pushnil (L);
-        lua_pushstring (L, dlerror ());
-        return 2;
+        error = dlerror ();
+        goto return_error;
     }
 
     Dwarf_Die dd_die = lookup_die (e, address, name);
@@ -165,17 +245,38 @@ eris_library_lookup (lua_State *L)
                            "for symbol '%s' (library %p)", name, e);
     }
 
-    /* Find the DIEs needed to generate a wrapper for the symbol. */
-    ErisFunction *f = lua_newuserdata (L, sizeof (ErisFunction));
-    f->library = e;
-    f->name = strdup (name);
-    f->address = address;
-    f->dd_die = dd_die;
-    f->kind = SYMBOL_UNKNOWN;
-    luaL_setmetatable (L, ERIS_FUNCTION);
-    TRACE ("new ErisFunction* at %p (%p:%s)\n",
-           f, f->library, f->name);
-    return 1;
+    Dwarf_Half dd_tag;
+    Dwarf_Error dd_error = 0;
+    if (dwarf_tag (dd_die,
+                   &dd_tag,
+                   &dd_error) != DW_DLV_OK) {
+        return luaL_error (L, "could not obtain DWARF debug information tag "
+                           "for symbol '%s' (library %p)", name, e);
+    }
+
+    switch (dd_tag) {
+        case DW_TAG_reference_type:
+            /* TODO: Implement dereferencing of references. */
+            return luaL_error (L, "DW_TAG_reference_type: unimplemented");
+
+        case DW_TAG_inlined_subroutine: /* TODO: Check whether inlines work. */
+        case DW_TAG_entry_point:
+        case DW_TAG_subprogram:
+            return make_function_wrapper (L, e, address, name, dd_die, dd_tag);
+
+        case DW_TAG_variable:
+            return make_variable_wrapper (L, e, address, name, dd_die, dd_tag);
+
+        default:
+            error = "unsupported debug info kind (not function or data)";
+            /* fall-through */
+    }
+
+    dwarf_dealloc (e->dd, dd_die, DW_DLA_DIE);
+return_error:
+    lua_pushnil (L);
+    lua_pushstring (L, error);
+    return 2;
 }
 
 
@@ -197,7 +298,7 @@ eris_function_gc (lua_State *L)
     dwarf_dealloc (f->library->dd, f->dd_die, DW_DLA_DIE);
     f->dd_die = 0;
 
-    free (f->name);
+    eris_symbol_free ((ErisSymbol*) f);
     return 0;
 }
 
@@ -229,6 +330,31 @@ static const luaL_Reg eris_function_methods[] = {
 };
 
 
+/* Methods for ErisVariable userdatas. */
+static int
+eris_variable_gc (lua_State *L)
+{
+    ErisVariable *ev = to_eris_variable (L);
+    TRACE ("%p (%p:%s)\n", ev, ev->library, ev->name);
+    eris_symbol_free ((ErisSymbol*) ev);
+    return 0;
+}
+
+static int
+eris_variable_tostring (lua_State *L)
+{
+    ErisVariable *ev = to_eris_variable (L);
+    lua_pushfstring (L, "eris.variable (%p:%s)", ev->library, ev->name);
+    return 1;
+}
+
+static const luaL_Reg eris_variable_methods[] = {
+    { "__gc",       eris_variable_gc       },
+    { "__tostring", eris_variable_tostring },
+    { NULL, NULL },
+};
+
+
 static void
 create_meta (lua_State *L)
 {
@@ -239,9 +365,14 @@ create_meta (lua_State *L)
     luaL_setfuncs (L, eris_library_methods, 0);
     lua_pop (L, 1);
 
-    /* ErisFunctionInfo */
+    /* ErisFunction */
     luaL_newmetatable (L, ERIS_FUNCTION);
     luaL_setfuncs (L, eris_function_methods, 0);
+    lua_pop (L, 1);
+
+    /* ErisVariable */
+    luaL_newmetatable (L, ERIS_VARIABLE);
+    luaL_setfuncs (L, eris_variable_methods, 0);
     lua_pop (L, 1);
 }
 

@@ -144,10 +144,15 @@ local function make_type_checker(typename)
 	}
 end
 
-for _, name in ipairs { "String", "Nil", "Number", "Function" } do
+local typenames = {
+	"Nil", "Number", "String", "Boolean",
+	"Table", "Function", "Thread", "Userdata",
+}
+for _, name in ipairs(typenames) do
 	Steps[name] = make_type_checker(name:lower())
 end
 make_type_checker = nil
+typenames = nil
 
 
 _G.assert = setmetatable({}, {
