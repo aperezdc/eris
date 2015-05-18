@@ -22,6 +22,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 #include <fcntl.h>
 #include <errno.h>
 
@@ -29,6 +30,24 @@
 #ifndef ERIS_LIB_SUFFIX
 #define ERIS_LIB_SUFFIX ".so"
 #endif /* !ERIS_LIB_SUFFIX */
+
+
+typedef enum {
+    ERIS_TYPE_INTEGRAL,
+} ErisTypeKind;
+
+
+typedef enum {
+    ERIS_TYPE_SIGNED  = 1 << 1,
+    ERIS_TYPE_CONST   = 1 << 2,
+} ErisTypeFlags;
+
+
+typedef struct {
+    ErisTypeKind  kind;
+    ErisTypeFlags flags;
+    uint16_t      size; /* sizeof (type) */
+} ErisTypeInfo;
 
 
 /*
@@ -86,6 +105,8 @@ typedef struct {
 
 typedef struct {
     ERIS_COMMON_FIELDS;
+    lua_CFunction getter;
+    lua_CFunction setter;
 } ErisVariable;
 
 
@@ -207,6 +228,87 @@ make_function_wrapper (lua_State   *L,
 }
 
 
+static bool
+find_variable_callbacks (const ErisTypeInfo *typeinfo,
+                         lua_CFunction      *getter,
+                         lua_CFunction      *setter);
+
+
+static bool
+base_type_to_typeinfo (ErisLibrary  *library,
+                       Dwarf_Die     d_type_die,
+                       ErisTypeInfo *typeinfo)
+{
+    bool success = false;
+
+    memset (typeinfo, 0x00, sizeof (ErisTypeInfo));
+    typeinfo->kind = ERIS_TYPE_INTEGRAL;
+
+    Dwarf_Error d_error = 0;
+    Dwarf_Attribute d_attr = 0;
+    if (dwarf_attr (d_type_die,
+                    DW_AT_encoding,
+                    &d_attr,
+                    &d_error) != DW_DLV_OK)
+        goto return_from_function;
+
+    Dwarf_Unsigned d_uval = 0;
+    if (dwarf_formudata (d_attr, &d_uval, &d_error) != DW_DLV_OK)
+        goto dealloc_attribute;
+
+    switch (d_uval) {
+        case DW_ATE_signed:
+            typeinfo->flags |= ERIS_TYPE_SIGNED;
+            break;
+        case DW_ATE_unsigned:
+            typeinfo->flags &= ~ERIS_TYPE_SIGNED;
+            break;
+        default:
+            goto dealloc_attribute;
+    }
+
+    dwarf_dealloc (library->d_debug, d_attr, DW_DLA_ATTR);
+    if (dwarf_attr (d_type_die,
+                    DW_AT_byte_size,
+                    &d_attr,
+                    &d_error) != DW_DLV_OK)
+        goto return_from_function;
+
+    if (dwarf_formudata (d_attr, &d_uval, &d_error) != DW_DLV_OK)
+        goto dealloc_attribute;
+
+    typeinfo->size = d_uval;
+    success = true;
+
+dealloc_attribute:
+    dwarf_dealloc (library->d_debug, d_attr, DW_DLA_ATTR);
+return_from_function:
+    return success;
+}
+
+
+static bool
+die_to_typeinfo (ErisLibrary  *library,
+                 Dwarf_Die     d_type_die,
+                 ErisTypeInfo *typeinfo)
+{
+    Dwarf_Half d_tag;
+    Dwarf_Error d_error;
+    if (dwarf_tag (d_type_die,
+                   &d_tag,
+                   &d_error) != DW_DLV_OK)
+        return false;
+
+    switch (d_tag) {
+        case DW_TAG_base_type:
+            return base_type_to_typeinfo (library, d_type_die, typeinfo);
+
+        default:
+            return false;
+    }
+}
+
+
 static int
 make_variable_wrapper (lua_State   *L,
                        ErisLibrary *library,
@@ -215,12 +317,60 @@ make_variable_wrapper (lua_State   *L,
                        Dwarf_Die    d_die,
                        Dwarf_Half   d_tag)
 {
+    Dwarf_Error d_error = 0;
+    Dwarf_Attribute d_attr = 0;
+    if (dwarf_attr (d_die,
+                    DW_AT_type,
+                    &d_attr,
+                    &d_error) != DW_DLV_OK) {
+        dwarf_dealloc (library->d_debug, d_die, DW_DLA_DIE);
+        return luaL_error (L, "could not obtain DW_AT_type attribute");
+    }
+
+    Dwarf_Off d_offset = 0;
+    if (dwarf_global_formref (d_attr,
+                              &d_offset,
+                              &d_error) != DW_DLV_OK) {
+        dwarf_dealloc (library->d_debug, d_attr, DW_DLA_ATTR);
+        dwarf_dealloc (library->d_debug, d_die, DW_DLA_DIE);
+        return luaL_error (L, "could not obtain DW_AT_type DIE offset");
+    }
+    dwarf_dealloc (library->d_debug, d_attr, DW_DLA_ATTR);
+
+    Dwarf_Die d_type_die = 0;
+    if (dwarf_offdie (library->d_debug,
+                      d_offset,
+                      &d_type_die,
+                      &d_error) != DW_DLV_OK) {
+        dwarf_dealloc (library->d_debug, d_die, DW_DLA_DIE);
+        return luaL_error (L, "could not obtain DW_AT_type DIE");
+    }
+
+    ErisTypeInfo typeinfo;
+    bool success = die_to_typeinfo (library, d_type_die, &typeinfo);
+    dwarf_dealloc (library->d_debug, d_type_die, DW_DLA_DIE);
+    dwarf_dealloc (library->d_debug, d_die, DW_DLA_DIE);
+
+    if (!success) {
+        return luaL_error (L, "Could not convert DIE to ErisTypeInfo");
+    }
+
+    lua_CFunction getter, setter;
+    if (!find_variable_callbacks (&typeinfo, &getter, &setter)) {
+        return luaL_error (L, "Unsupported variable type");
+    }
+
+    /*
+     * TODO: Check whether the DIE signals the variable as a constant,
+     *       and make the setter NULL to avoid writes.
+     */
+
     ErisVariable *ev = lua_newuserdata(L, sizeof (ErisVariable));
     eris_symbol_init ((ErisSymbol*) ev, library, address, name);
+    ev->getter = getter;
+    ev->setter = setter;
     luaL_setmetatable (L, ERIS_VARIABLE);
     TRACE ("new ErisVariable* at %p (%p:%s)\n", ev, library, name);
-    /* The DIE is unneeded from this point onwards. */
-    dwarf_dealloc (library->d_debug, d_die, DW_DLA_DIE);
     return 1;
 }
 
@@ -245,11 +395,42 @@ eris_library_lookup (lua_State *L)
                            "for symbol '%s' (library %p)", name, e);
     }
 
-    Dwarf_Half d_tag;
+    /*
+     * Check that the variable/function is an exported global, i.e. it has
+     * the DW_AT_external attribute. If the attribute is missing, assume
+     * that we can proceed.
+     *
+     * TODO: Provided that lookup_die() uses the list of DWARF globals, all
+     *       DIEs must be always exported globals. Maybe this can be turned
+     *       into a debug-build-only check. Plus: dlsym() won't resolve it.
+     */
+    bool symbol_is_private = true;
     Dwarf_Error d_error = 0;
+    Dwarf_Attribute d_attr = 0;
+    if (dwarf_attr (d_die,
+                    DW_AT_external,
+                    &d_attr,
+                    &d_error) == DW_DLV_OK) {
+        Dwarf_Bool d_flag_external;
+        if (dwarf_formflag (d_attr,
+                            &d_flag_external,
+                            &d_error) == DW_DLV_OK) {
+            symbol_is_private = !d_flag_external;
+        }
+        dwarf_dealloc (e->d_debug, d_attr, DW_DLA_ATTR);
+    }
+
+    if (symbol_is_private) {
+        error = "symbol is private";
+        goto dealloc_die_and_return_error;
+    }
+
+    /* Obtain the DIE type tag. */
+    Dwarf_Half d_tag;
     if (dwarf_tag (d_die,
                    &d_tag,
                    &d_error) != DW_DLV_OK) {
+        dwarf_dealloc (e->d_debug, d_die, DW_DLA_DIE);
         return luaL_error (L, "could not obtain DWARF debug information tag "
                            "for symbol '%s' (library %p)", name, e);
     }
@@ -272,6 +453,7 @@ eris_library_lookup (lua_State *L)
             /* fall-through */
     }
 
+dealloc_die_and_return_error:
     dwarf_dealloc (e->d_debug, d_die, DW_DLA_DIE);
 return_error:
     lua_pushnil (L);
@@ -348,9 +530,26 @@ eris_variable_tostring (lua_State *L)
     return 1;
 }
 
+static int
+eris_variable_set (lua_State *L)
+{
+    ErisVariable *ev = to_eris_variable (L);
+    return (*ev->setter) (L);
+}
+
+static int
+eris_variable_get (lua_State *L)
+{
+    ErisVariable *ev = to_eris_variable (L);
+    return (*ev->getter) (L);
+}
+
+
 static const luaL_Reg eris_variable_methods[] = {
     { "__gc",       eris_variable_gc       },
     { "__tostring", eris_variable_tostring },
+    { "get",        eris_variable_get      },
+    { "set",        eris_variable_set      },
     { NULL, NULL },
 };
 
@@ -372,6 +571,8 @@ create_meta (lua_State *L)
 
     /* ErisVariable */
     luaL_newmetatable (L, ERIS_VARIABLE);
+    lua_pushvalue (L, -1);           /* Push metatable */
+    lua_setfield (L, -2, "__index"); /* metatable.__index == metatable */
     luaL_setfuncs (L, eris_variable_methods, 0);
     lua_pop (L, 1);
 }
@@ -561,4 +762,85 @@ lookup_die (ErisLibrary *el,
     }
 
     return NULL;
+}
+
+
+#define INTEGER_TYPES(F) \
+    F (int8_t,   true)   \
+    F (uint8_t,  false)  \
+    F (int16_t,  true)   \
+    F (uint16_t, false)  \
+    F (int32_t,  true)   \
+    F (uint32_t, false)
+
+
+/*
+ * TODO: Implement setter code generation.
+ */
+#define MAKE_INTEGER_GETTER_AND_SETTER(ctype, is_signed)     \
+    static int eris_variable_get__ ## ctype (lua_State *L) { \
+        ErisVariable *ev = to_eris_variable (L);             \
+        lua_pushinteger (L, *((ctype *) ev->address));       \
+        return 1;                                            \
+    }                                                        \
+    static int eris_variable_set__ ## ctype (lua_State *L) { \
+        return luaL_error(L, "Setter for '" #ctype           \
+                          "' is unimplemented");             \
+    }
+
+INTEGER_TYPES (MAKE_INTEGER_GETTER_AND_SETTER)
+
+#undef MAKE_INTEGER_GETTER_AND_SETTER
+
+
+static const struct {
+    const char   *typename;
+    lua_CFunction getter;
+    lua_CFunction setter;
+    ErisTypeInfo  typeinfo;
+} builtin_type_callbacks[] = {
+#define INTEGER_GETTER_ITEM(ctype, is_signed) {         \
+    .typename       = #ctype,                           \
+    .getter         = eris_variable_get__ ## ctype,     \
+    .setter         = eris_variable_set__ ## ctype,     \
+    .typeinfo.kind  = ERIS_TYPE_INTEGRAL,               \
+    .typeinfo.flags = is_signed ? ERIS_TYPE_SIGNED : 0, \
+    .typeinfo.size  = sizeof (ctype) },
+
+    INTEGER_TYPES (INTEGER_GETTER_ITEM)
+
+#undef INTEGER_GETTER_ITEM
+};
+
+
+static bool
+typeinfo_equal (const ErisTypeInfo *a,
+                const ErisTypeInfo *b)
+{
+    if (a->kind != b->kind || a->size != b->size)
+        return false;
+
+    /* Ignore the ERIS_TYPE_CONST flag. */
+    const ErisTypeFlags a_flags = a->flags & ~ERIS_TYPE_CONST;
+    const ErisTypeFlags b_flags = b->flags & ~ERIS_TYPE_CONST;
+
+    return a_flags == b_flags;
+}
+
+
+static bool
+find_variable_callbacks (const ErisTypeInfo *typeinfo,
+                         lua_CFunction      *getter,
+                         lua_CFunction      *setter)
+{
+    for (size_t i = 0; i < LENGTH_OF (builtin_type_callbacks); i++) {
+        if (typeinfo_equal (typeinfo, &builtin_type_callbacks[i].typeinfo)) {
+            if (getter)
+                *getter = builtin_type_callbacks[i].getter;
+            if (setter)
+                *setter = builtin_type_callbacks[i].setter;
+            return true;
+        }
+    }
+    return false;
 }
