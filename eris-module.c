@@ -258,9 +258,11 @@ base_type_to_typeinfo (ErisLibrary  *library,
 
     switch (d_uval) {
         case DW_ATE_signed:
+        case DW_ATE_signed_char:
             typeinfo->flags |= ERIS_TYPE_SIGNED;
             break;
         case DW_ATE_unsigned:
+        case DW_ATE_unsigned_char:
             typeinfo->flags &= ~ERIS_TYPE_SIGNED;
             break;
         default:
@@ -783,13 +785,20 @@ lookup_die (ErisLibrary *el,
 }
 
 
+/*
+ * TODO: Depending on the size of lua_Integer and lua_Number, it may not be
+ *       possible to always represent 64-bit numbers. In that case, the 64-bit
+ *       types should be left out at compile-time, or wrapped into userdata.
+ */
 #define INTEGER_TYPES(F) \
-    F (int8_t,   true)   \
+    F (int8_t,   true )  \
     F (uint8_t,  false)  \
-    F (int16_t,  true)   \
+    F (int16_t,  true )  \
     F (uint16_t, false)  \
-    F (int32_t,  true)   \
-    F (uint32_t, false)
+    F (int32_t,  true )  \
+    F (uint32_t, false)  \
+    F (int64_t,  true )  \
+    F (uint64_t, false)
 
 
 #define MAKE_INTEGER_GETTER_AND_SETTER(ctype, is_signed)     \
