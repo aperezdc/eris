@@ -1,8 +1,8 @@
 include build.conf
 
-cflags   = -std=gnu99 -Wall $CFLAGS
+cflags   = -fPIC -std=gnu99 -Wall $CFLAGS
 cppflags = $CPPFLAGS
-ldflags  = -Wl,-E $LDFLAGS
+ldflags  = -fPIC -Wl,-E $LDFLAGS
 
 rule cc
   deps = gcc

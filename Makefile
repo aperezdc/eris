@@ -27,11 +27,11 @@ OUT     := ${obj}
 PREFIX   = ${prefix}
 LDLIBS   = ${libs}
 CC       = ${cc}
-LDFLAGS += -Wl,-E
+LDFLAGS += -fPIC -Wl,-E
 
 # We want -Wall *before* the other CFLAGS, so we have to force its
 # expansion and then re-assign to the variable.
-EXPAND_CFLAGS := -std=gnu99 -Wall ${CFLAGS}
+EXPAND_CFLAGS := -fPIC -std=gnu99 -Wall ${CFLAGS}
 CFLAGS = ${EXPAND_CFLAGS}
 
 # Lua sources.
