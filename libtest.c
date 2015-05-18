@@ -21,6 +21,10 @@ uint32_t var_u32 =  32;
 int64_t  var_i64 = -64;
 uint64_t var_u64 =  64;
 
+/* Floating point numbers. */
+float    var_flt = 1.0;
+double   var_dbl = 1.0;
+
 
 static int
 private_add (int a, int b)

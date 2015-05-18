@@ -34,6 +34,7 @@
 
 typedef enum {
     ERIS_TYPE_INTEGRAL,
+    ERIS_TYPE_FLOAT,
 } ErisTypeKind;
 
 
@@ -242,7 +243,6 @@ base_type_to_typeinfo (ErisLibrary  *library,
     bool success = false;
 
     memset (typeinfo, 0x00, sizeof (ErisTypeInfo));
-    typeinfo->kind = ERIS_TYPE_INTEGRAL;
 
     Dwarf_Error d_error = 0;
     Dwarf_Attribute d_attr = 0;
@@ -257,14 +257,23 @@ base_type_to_typeinfo (ErisLibrary  *library,
         goto dealloc_attribute;
 
     switch (d_uval) {
-        case DW_ATE_signed:
-        case DW_ATE_signed_char:
+        case DW_ATE_float:
+            typeinfo->kind = ERIS_TYPE_FLOAT;
             typeinfo->flags |= ERIS_TYPE_SIGNED;
             break;
+
+        case DW_ATE_signed:
+        case DW_ATE_signed_char:
+            typeinfo->kind = ERIS_TYPE_INTEGRAL;
+            typeinfo->flags |= ERIS_TYPE_SIGNED;
+            break;
+
         case DW_ATE_unsigned:
         case DW_ATE_unsigned_char:
+            typeinfo->kind = ERIS_TYPE_INTEGRAL;
             typeinfo->flags &= ~ERIS_TYPE_SIGNED;
             break;
+
         default:
             goto dealloc_attribute;
     }
@@ -800,6 +809,10 @@ lookup_die (ErisLibrary *el,
     F (int64_t,  true )  \
     F (uint64_t, false)
 
+#define FLOAT_TYPES(F) \
+    F (double) \
+    F (float)
+
 
 #define MAKE_INTEGER_GETTER_AND_SETTER(ctype, is_signed)     \
     static int eris_variable_get__ ## ctype (lua_State *L) { \
@@ -814,9 +827,24 @@ lookup_die (ErisLibrary *el,
         return 0;                                            \
     }
 
+#define MAKE_FLOAT_GETTER_AND_SETTER(ctype) \
+    static int eris_variable_get__ ## ctype (lua_State *L) { \
+        ErisVariable *ev = to_eris_variable (L);             \
+        lua_pushnumber (L, *((ctype *) ev->address));        \
+        return 1;                                            \
+    }                                                        \
+    static int eris_variable_set__ ## ctype (lua_State *L) { \
+        ErisVariable *ev = to_eris_variable (L);             \
+        *((ctype *) ev->address) =                           \
+            (ctype) luaL_checknumber (L, 2);                 \
+        return 0;                                            \
+    }
+
 INTEGER_TYPES (MAKE_INTEGER_GETTER_AND_SETTER)
+FLOAT_TYPES (MAKE_FLOAT_GETTER_AND_SETTER)
 
 #undef MAKE_INTEGER_GETTER_AND_SETTER
+#undef MAKE_FLOAT_GETTER_AND_SETTER
 
 
 static const struct {
@@ -825,7 +853,7 @@ static const struct {
     lua_CFunction setter;
     ErisTypeInfo  typeinfo;
 } builtin_type_callbacks[] = {
-#define INTEGER_GETTER_ITEM(ctype, is_signed) {         \
+#define INTEGER_GETTER_SETTER_ITEM(ctype, is_signed) {  \
     .typename       = #ctype,                           \
     .getter         = eris_variable_get__ ## ctype,     \
     .setter         = eris_variable_set__ ## ctype,     \
@@ -833,9 +861,19 @@ static const struct {
     .typeinfo.flags = is_signed ? ERIS_TYPE_SIGNED : 0, \
     .typeinfo.size  = sizeof (ctype) },
 
-    INTEGER_TYPES (INTEGER_GETTER_ITEM)
+#define FLOAT_GETTER_SETTER_ITEM(ctype) {               \
+    .typename       = #ctype,                           \
+    .getter         = eris_variable_get__ ## ctype,     \
+    .setter         = eris_variable_set__ ## ctype,     \
+    .typeinfo.kind  = ERIS_TYPE_FLOAT,                  \
+    .typeinfo.flags = ERIS_TYPE_SIGNED,                 \
+    .typeinfo.size  = sizeof (ctype) },
 
-#undef INTEGER_GETTER_ITEM
+    INTEGER_TYPES (INTEGER_GETTER_SETTER_ITEM)
+    FLOAT_TYPES (FLOAT_GETTER_SETTER_ITEM)
+
+#undef INTEGER_GETTER_SETTER_ITEM
+#undef FLOAT_GETTER_SETTER_ITEM
 };
 
 
