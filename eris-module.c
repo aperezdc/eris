@@ -774,9 +774,6 @@ lookup_die (ErisLibrary *el,
     F (uint32_t, false)
 
 
-/*
- * TODO: Implement setter code generation.
- */
 #define MAKE_INTEGER_GETTER_AND_SETTER(ctype, is_signed)     \
     static int eris_variable_get__ ## ctype (lua_State *L) { \
         ErisVariable *ev = to_eris_variable (L);             \
@@ -784,8 +781,10 @@ lookup_die (ErisLibrary *el,
         return 1;                                            \
     }                                                        \
     static int eris_variable_set__ ## ctype (lua_State *L) { \
-        return luaL_error(L, "Setter for '" #ctype           \
-                          "' is unimplemented");             \
+        ErisVariable *ev = to_eris_variable (L);             \
+        *((ctype *) ev->address) =                           \
+            (ctype) luaL_checkinteger (L, 2);                \
+        return 0;                                            \
     }
 
 INTEGER_TYPES (MAKE_INTEGER_GETTER_AND_SETTER)

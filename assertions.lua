@@ -168,6 +168,12 @@ Steps.Userdata = {
 	end
 }
 
+Steps.Equal = {
+	apply = function (self, _, expected, obj)
+		return tostring(expected), expected == obj
+	end
+}
+
 
 _G.assert = setmetatable({}, {
 	__index = function (table, key)
