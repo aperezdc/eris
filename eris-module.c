@@ -287,6 +287,34 @@ return_from_function:
 }
 
 
+static Dwarf_Die
+die_get_die_reference_attribute (ErisLibrary *library,
+                                 Dwarf_Die    d_die,
+                                 Dwarf_Half   d_attr_tag,
+                                 Dwarf_Error *d_error)
+{
+    Dwarf_Attribute d_attr = NULL;
+    if (dwarf_attr (d_die, d_attr_tag, &d_attr, d_error) != DW_DLV_OK)
+        return NULL;
+
+    Dwarf_Die d_result_die = NULL;
+    Dwarf_Die d_attr_die;
+    Dwarf_Off d_offset;
+    if (dwarf_global_formref (d_attr,
+                              &d_offset,
+                              d_error) == DW_DLV_OK &&
+        dwarf_offdie (library->d_debug,
+                      d_offset,
+                      &d_attr_die,
+                      d_error) == DW_DLV_OK) {
+        d_result_die = d_attr_die;
+    }
+
+    dwarf_dealloc (library->d_debug, d_attr, DW_DLA_ATTR);
+    return d_result_die;
+}
+
+
 static bool
 die_to_typeinfo (ErisLibrary  *library,
                  Dwarf_Die     d_type_die,
@@ -303,6 +331,16 @@ die_to_typeinfo (ErisLibrary  *library,
         case DW_TAG_base_type:
             return base_type_to_typeinfo (library, d_type_die, typeinfo);
 
+        case DW_TAG_typedef: {
+            Dwarf_Die d_base_type_die = die_get_die_reference_attribute (library,
+                                                                         d_type_die,
+                                                                         DW_AT_type,
+                                                                         &d_error);
+            bool success = die_to_typeinfo (library, d_base_type_die, typeinfo);
+            dwarf_dealloc (library->d_debug, d_base_type_die, DW_DLA_DIE);
+            return success;
+        }
+
         default:
             return false;
     }
@@ -318,32 +356,12 @@ make_variable_wrapper (lua_State   *L,
                        Dwarf_Half   d_tag)
 {
     Dwarf_Error d_error = 0;
-    Dwarf_Attribute d_attr = 0;
-    if (dwarf_attr (d_die,
-                    DW_AT_type,
-                    &d_attr,
-                    &d_error) != DW_DLV_OK) {
-        dwarf_dealloc (library->d_debug, d_die, DW_DLA_DIE);
-        return luaL_error (L, "could not obtain DW_AT_type attribute");
-    }
-
-    Dwarf_Off d_offset = 0;
-    if (dwarf_global_formref (d_attr,
-                              &d_offset,
-                              &d_error) != DW_DLV_OK) {
-        dwarf_dealloc (library->d_debug, d_attr, DW_DLA_ATTR);
-        dwarf_dealloc (library->d_debug, d_die, DW_DLA_DIE);
-        return luaL_error (L, "could not obtain DW_AT_type DIE offset");
-    }
-    dwarf_dealloc (library->d_debug, d_attr, DW_DLA_ATTR);
-
-    Dwarf_Die d_type_die = 0;
-    if (dwarf_offdie (library->d_debug,
-                      d_offset,
-                      &d_type_die,
-                      &d_error) != DW_DLV_OK) {
-        dwarf_dealloc (library->d_debug, d_die, DW_DLA_DIE);
-        return luaL_error (L, "could not obtain DW_AT_type DIE");
+    Dwarf_Die d_type_die = die_get_die_reference_attribute (library,
+                                                            d_die,
+                                                            DW_AT_type,
+                                                            &d_error);
+    if (!d_type_die) {
+        return luaL_error (L, "%s: Could not obtain DW_AT_type DIE", name);
     }
 
     ErisTypeInfo typeinfo;
