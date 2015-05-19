@@ -59,6 +59,21 @@ eris_typeinfo_is_const (const ErisTypeInfo *typeinfo)
 }
 
 
+static bool
+eris_typeinfo_equal (const ErisTypeInfo *a,
+                     const ErisTypeInfo *b)
+{
+    if (a->kind != b->kind || a->size != b->size)
+        return false;
+
+    /* Ignore the ERIS_TYPE_CONST flag. */
+    const ErisTypeFlags a_flags = a->flags & ~ERIS_TYPE_CONST;
+    const ErisTypeFlags b_flags = b->flags & ~ERIS_TYPE_CONST;
+
+    return a_flags == b_flags;
+}
+
+
 /*
  * Data needed for each library loaded by "eris.load()".
  */
@@ -911,27 +926,12 @@ static const struct {
 
 
 static bool
-typeinfo_equal (const ErisTypeInfo *a,
-                const ErisTypeInfo *b)
-{
-    if (a->kind != b->kind || a->size != b->size)
-        return false;
-
-    /* Ignore the ERIS_TYPE_CONST flag. */
-    const ErisTypeFlags a_flags = a->flags & ~ERIS_TYPE_CONST;
-    const ErisTypeFlags b_flags = b->flags & ~ERIS_TYPE_CONST;
-
-    return a_flags == b_flags;
-}
-
-
-static bool
 find_variable_callbacks (const ErisTypeInfo *typeinfo,
                          lua_CFunction      *getter,
                          lua_CFunction      *setter)
 {
     for (size_t i = 0; i < LENGTH_OF (builtin_type_callbacks); i++) {
-        if (typeinfo_equal (typeinfo, &builtin_type_callbacks[i].typeinfo)) {
+        if (eris_typeinfo_equal (typeinfo, &builtin_type_callbacks[i].typeinfo)) {
             if (getter)
                 *getter = builtin_type_callbacks[i].getter;
             if (setter)
