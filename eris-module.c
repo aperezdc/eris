@@ -337,13 +337,13 @@ die_get_die_reference_attribute (ErisLibrary *library,
 static bool
 die_to_typeinfo (ErisLibrary  *library,
                  Dwarf_Die     d_type_die,
-                 ErisTypeInfo *typeinfo)
+                 ErisTypeInfo *typeinfo,
+                 Dwarf_Error  *d_error)
 {
     Dwarf_Half d_tag;
-    Dwarf_Error d_error;
     if (dwarf_tag (d_type_die,
                    &d_tag,
-                   &d_error) != DW_DLV_OK)
+                   d_error) != DW_DLV_OK)
         return false;
 
     switch (d_tag) {
@@ -355,27 +355,38 @@ die_to_typeinfo (ErisLibrary  *library,
                 die_get_die_reference_attribute (library,
                                                  d_type_die,
                                                  DW_AT_type,
-                                                 &d_error);
+                                                 d_error);
             bool success = die_to_typeinfo (library,
                                             d_base_type_die,
-                                            typeinfo);
+                                            typeinfo,
+                                            d_error);
             dwarf_dealloc (library->d_debug, d_base_type_die, DW_DLA_DIE);
             typeinfo->flags |= ERIS_TYPE_CONST;
             return success;
         }
         case DW_TAG_typedef: {
-            Dwarf_Die d_base_type_die = die_get_die_reference_attribute (library,
-                                                                         d_type_die,
-                                                                         DW_AT_type,
-                                                                         &d_error);
-            bool success = die_to_typeinfo (library, d_base_type_die, typeinfo);
+            Dwarf_Die d_base_type_die =
+                die_get_die_reference_attribute (library,
+                                                 d_type_die,
+                                                 DW_AT_type,
+                                                 d_error);
+            bool success = die_to_typeinfo (library,
+                                            d_base_type_die,
+                                            typeinfo,
+                                            d_error);
             dwarf_dealloc (library->d_debug, d_base_type_die, DW_DLA_DIE);
             return success;
         }
-
         default:
             return false;
     }
+}
+
+
+static inline const char*
+dw_errmsg(Dwarf_Error d_error)
+{
+    return d_error ? dwarf_errmsg (d_error) : "no libdwarf error";
 }
 
 
@@ -393,21 +404,23 @@ make_variable_wrapper (lua_State   *L,
                                                             DW_AT_type,
                                                             &d_error);
     if (!d_type_die) {
-        return luaL_error (L, "%s: Could not obtain DW_AT_type DIE", name);
+        return luaL_error (L, "%s: Could not obtain DW_AT_type DIE (%s)",
+                           name, dw_errmsg (d_error));
     }
 
     ErisTypeInfo typeinfo;
-    bool success = die_to_typeinfo (library, d_type_die, &typeinfo);
+    bool success = die_to_typeinfo (library, d_type_die, &typeinfo, &d_error);
     dwarf_dealloc (library->d_debug, d_type_die, DW_DLA_DIE);
     dwarf_dealloc (library->d_debug, d_die, DW_DLA_DIE);
 
     if (!success) {
-        return luaL_error (L, "Could not convert DIE to ErisTypeInfo");
+        return luaL_error (L, "%s: Could not convert DIE to ErisTypeInfo (%s)",
+                           name, dw_errmsg (d_error));
     }
 
     lua_CFunction getter, setter;
     if (!find_variable_callbacks (&typeinfo, &getter, &setter)) {
-        return luaL_error (L, "Unsupported variable type");
+        return luaL_error (L, "%s: Unsupported variable type", name);
     }
 
     ErisVariable *ev = lua_newuserdata(L, sizeof (ErisVariable));
