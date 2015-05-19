@@ -25,6 +25,9 @@ uint64_t var_u64 =  64;
 float    var_flt = 1.0;
 double   var_dbl = 1.0;
 
+/* Constant declaration. */
+const int const_int = 42;
+
 
 static int
 private_add (int a, int b)

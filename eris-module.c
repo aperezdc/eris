@@ -51,6 +51,14 @@ typedef struct {
 } ErisTypeInfo;
 
 
+
+static inline bool
+eris_typeinfo_is_const (const ErisTypeInfo *typeinfo)
+{
+    return (typeinfo->flags & ERIS_TYPE_CONST) == ERIS_TYPE_CONST;
+}
+
+
 /*
  * Data needed for each library loaded by "eris.load()".
  */
@@ -342,6 +350,19 @@ die_to_typeinfo (ErisLibrary  *library,
         case DW_TAG_base_type:
             return base_type_to_typeinfo (library, d_type_die, typeinfo);
 
+        case DW_TAG_const_type: {
+            Dwarf_Die d_base_type_die =
+                die_get_die_reference_attribute (library,
+                                                 d_type_die,
+                                                 DW_AT_type,
+                                                 &d_error);
+            bool success = die_to_typeinfo (library,
+                                            d_base_type_die,
+                                            typeinfo);
+            dwarf_dealloc (library->d_debug, d_base_type_die, DW_DLA_DIE);
+            typeinfo->flags |= ERIS_TYPE_CONST;
+            return success;
+        }
         case DW_TAG_typedef: {
             Dwarf_Die d_base_type_die = die_get_die_reference_attribute (library,
                                                                          d_type_die,
@@ -389,15 +410,10 @@ make_variable_wrapper (lua_State   *L,
         return luaL_error (L, "Unsupported variable type");
     }
 
-    /*
-     * TODO: Check whether the DIE signals the variable as a constant,
-     *       and make the setter NULL to avoid writes.
-     */
-
     ErisVariable *ev = lua_newuserdata(L, sizeof (ErisVariable));
     eris_symbol_init ((ErisSymbol*) ev, library, address, name);
     ev->getter = getter;
-    ev->setter = setter;
+    ev->setter = eris_typeinfo_is_const (&typeinfo) ? NULL : setter;
     luaL_setmetatable (L, ERIS_VARIABLE);
     TRACE ("new ErisVariable* at %p (%p:%s)\n", ev, library, name);
     return 1;
@@ -563,7 +579,11 @@ static int
 eris_variable_set (lua_State *L)
 {
     ErisVariable *ev = to_eris_variable (L);
-    return (*ev->setter) (L);
+    if (ev->setter)
+        return (*ev->setter) (L);
+
+    return luaL_error (L, "read-only variable (%p:%s)",
+                       ev->library, ev->name);
 }
 
 static int
