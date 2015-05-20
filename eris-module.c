@@ -467,7 +467,7 @@ make_variable_wrapper (lua_State   *L,
 
 
 static int
-eris_library_lookup (lua_State *L)
+eris_library_index (lua_State *L)
 {
     ErisLibrary *e = to_eris_library (L);
     const char *name = luaL_checkstring (L, 2);
@@ -589,7 +589,7 @@ eris_function_tostring (lua_State *L)
 static const luaL_Reg eris_library_methods[] = {
     { "__gc",       eris_library_gc       },
     { "__tostring", eris_library_tostring },
-    { "lookup",     eris_library_lookup   },
+    { "__index",    eris_library_index    },
     { NULL, NULL }
 };
 

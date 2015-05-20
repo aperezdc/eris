@@ -59,10 +59,10 @@ Once built, the `eris` module can be used from Lua:
 
 ```lua
 -- Find and load the readline library from the standard system directories.
-libreadline = require("eris").load("libreadline")
+local libreadline = require("eris").load("libreadline")
 
 -- Obtain a handle to the readline() function, which allows calling it.
-readline = libreadline:lookup("readline")
+local readline = libreadline.readline
 
 -- Read a line from standard input using readline() and echo it back.
 print(readline("input: "))

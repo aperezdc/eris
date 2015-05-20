@@ -21,7 +21,7 @@ end
 for _, width in ipairs { 8, 16, 32, 64 } do
 	for _, signedness in ipairs { "i", "u" } do
 		local variable_name = "var_" .. signedness .. tostring(width)
-		local variable = libtest:lookup(variable_name)
+		local variable = libtest[variable_name]
 		check_variable(variable, signedness == "i" and -width or width)
 	end
 end

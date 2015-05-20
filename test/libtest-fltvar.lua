@@ -9,7 +9,7 @@
 local libtest = require("eris").load("libtest")
 
 for _, varname in ipairs { "var_flt", "var_dbl" } do
-	local variable = libtest:lookup(varname)
+	local variable = libtest[varname]
 	assert.Not.Nil(variable)
 	assert.Not.Callable(variable)
 	assert.Equal(1.0, variable:get())

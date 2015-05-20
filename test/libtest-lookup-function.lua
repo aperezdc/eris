@@ -8,9 +8,8 @@
 
 local libtest = require("eris").load("libtest")
 assert(libtest, "could not load libtest.so")
-assert.Field(libtest, "lookup")
 
-local add = libtest:lookup("add")
+local add = libtest.add
 assert.Not.Nil(add)
 assert.Userdata(add, "org.perezdecastro.eris.Function")
 assert.Callable(add)

@@ -7,7 +7,7 @@
 --
 
 local libtest = require("eris").load("libtest")
-local variable = libtest:lookup("const_int")
+local variable = libtest.const_int
 
 assert.Not.Nil(variable)
 assert.Not.Callable(variable)
