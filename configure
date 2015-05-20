@@ -206,6 +206,7 @@ if ${enable_asan} ; then
 	fi
 	LDFLAGS="${CFLAGS} -fsanitize=address"
 	CFLAGS="${CFLAGS} -fsanitize=address"
+	build_type="${build_type} (+asan)"
 fi
 
 if ${enable_trace} ; then
