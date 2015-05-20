@@ -78,6 +78,8 @@ eris_typeinfo_equal (const ErisTypeInfo *a,
  * Data needed for each library loaded by "eris.load()".
  */
 typedef struct {
+    REF_COUNTER;
+
     int           fd;
     void         *dl;
     intptr_t      dl_diff;
@@ -90,11 +92,22 @@ typedef struct {
 
 static const char ERIS_LIBRARY[]  = "org.perezdecastro.eris.Library";
 
+static void eris_library_free (ErisLibrary*);
+REF_COUNTER_FUNCTIONS (ErisLibrary, eris_library, static inline)
+
+
+static inline void
+eris_library_push_userdata (lua_State *L, ErisLibrary *el)
+{
+    ErisLibrary **elp = lua_newuserdata (L, sizeof (ErisLibrary*));
+    *elp = eris_library_ref (el);
+    luaL_setmetatable (L, ERIS_LIBRARY);
+}
 
 static inline ErisLibrary*
 to_eris_library (lua_State *L)
 {
-    return (ErisLibrary*) luaL_checkudata (L, 1, ERIS_LIBRARY);
+    return *((ErisLibrary**) luaL_checkudata (L, 1, ERIS_LIBRARY));
 }
 
 
@@ -181,23 +194,29 @@ find_library (const char *name, char path[PATH_MAX])
 }
 
 
-
-static int
-eris_library_gc (lua_State *L)
+static
+void eris_library_free (ErisLibrary *el)
 {
-    ErisLibrary *el = to_eris_library (L);
     TRACE ("%p\n", el);
 
-    if (el->d_globals) {
+    if (el->d_globals)
         dwarf_globals_dealloc (el->d_debug, el->d_globals, el->d_num_globals);
-    }
 
     Dwarf_Error d_error;
     dwarf_finish (el->d_debug, &d_error);
 
     close (el->fd);
     dlclose (el->dl);
+    free (el);
+}
 
+
+static int
+eris_library_gc (lua_State *L)
+{
+    ErisLibrary *el = to_eris_library (L);
+    TRACE ("%p\n", el);
+    eris_library_unref (el);
     return 0;
 }
 
@@ -221,7 +240,7 @@ eris_symbol_init (ErisSymbol  *symbol,
                   void        *address,
                   const char  *name)
 {
-    symbol->library = library;
+    symbol->library = eris_library_ref (library);
     symbol->name = strdup (name);
     symbol->address = address;
 }
@@ -230,6 +249,7 @@ eris_symbol_init (ErisSymbol  *symbol,
 static inline void
 eris_symbol_free (ErisSymbol *symbol)
 {
+    eris_library_unref (symbol->library);
     free (symbol->name);
     memset (symbol, 0x00, sizeof (ErisSymbol));
 }
@@ -723,7 +743,7 @@ eris_load (lua_State *L)
     }
 #endif /* ERIS_TRACE > 0 */
 
-    ErisLibrary *el = lua_newuserdata (L, sizeof (ErisLibrary));
+    ErisLibrary *el = calloc (1, sizeof (ErisLibrary));
     el->fd = fd;
     el->dl = dl;
     el->d_debug = d_debug;
@@ -731,6 +751,7 @@ eris_load (lua_State *L)
     el->d_num_globals = d_num_globals;
 
     if (!find_library_base_address (el)) {
+        free (el);
         dwarf_finish (d_debug, &d_error);
         close (fd);
         dlclose (dl);
@@ -742,7 +763,7 @@ eris_load (lua_State *L)
 #endif /* ERIS_USE_LINK_H */
     }
 
-    luaL_setmetatable (L, ERIS_LIBRARY);
+    eris_library_push_userdata (L, el);
     TRACE ("new ErisLibrary* at %p\n", el);
     return 1;
 }
