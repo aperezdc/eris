@@ -82,7 +82,6 @@ typedef struct {
 
     int           fd;
     void         *dl;
-    intptr_t      dl_diff;
 
     Dwarf_Debug   d_debug;
     Dwarf_Global *d_globals;
@@ -111,7 +110,6 @@ to_eris_library (lua_State *L)
 }
 
 
-static bool find_library_base_address (ErisLibrary *el);
 static Dwarf_Die lookup_die (ErisLibrary *el, const void *address, const char *name);
 
 
@@ -749,20 +747,6 @@ eris_load (lua_State *L)
     el->d_debug = d_debug;
     el->d_globals = d_globals;
     el->d_num_globals = d_num_globals;
-
-    if (!find_library_base_address (el)) {
-        free (el);
-        dwarf_finish (d_debug, &d_error);
-        close (fd);
-        dlclose (dl);
-#ifdef ERIS_USE_LINK_H
-        return luaL_error (L, "cannot determine library load address (%s)",
-                           dlerror ());
-#else
-        return luaL_error (L, "cannot determine library load address");
-#endif /* ERIS_USE_LINK_H */
-    }
-
     eris_library_push_userdata (L, el);
     TRACE ("new ErisLibrary* at %p\n", el);
     return 1;
@@ -788,26 +772,6 @@ luaopen_eris (lua_State *L)
     create_meta (L);
     return 1;
 }
-
-
-#ifdef ERIS_USE_LINK_H
-# include <link.h>
-
-static bool
-find_library_base_address (ErisLibrary *el)
-{
-    struct link_map *map = NULL;
-    if (dlinfo (el->dl, RTLD_DI_LINKMAP, &map) != 0) {
-        return false;
-    }
-    el->dl_diff = map->l_addr;
-    TRACE ("diff = %#llx (link_map)\n", (long long) el->dl_diff);
-    return true;
-}
-
-#else
-# error No method chosen to determe the load address of libraries
-#endif /* ERIS_USE_LINK_H */
 
 
 static Dwarf_Die

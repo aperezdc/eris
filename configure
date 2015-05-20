@@ -214,9 +214,6 @@ fi
 
 echo "Build type: ${build_type}"
 
-
-need_gnu_source_def=false
-
 # Mandatory headers and libraries.
 mandatory_header '<dlfcn.h>'
 
@@ -250,17 +247,6 @@ fi
 
 ##################################### Optional headers and libraries ######
 
-# This is system-specific, and known to work on glibc-based systems.
-if try_header '<link.h>' && try_link 'dlinfo()' -ldl <<-EOF
-	#define _GNU_SOURCE 1
-	#include <dlfcn.h>
-	int main () { return dlinfo ((void*) 1, 0, (void*) 1); }
-	EOF
-then
-	CPPFLAGS="${CPPFLAGS} -DERIS_USE_LINK_H=1"
-	need_gnu_source_def=true
-fi
-
 if try_link 'readline()' -lreadline <<-EOF
 	#include <stdio.h>
 	#include <readline/readline.h>
@@ -272,11 +258,6 @@ then
 fi
 
 ####################################################### Final fixups ######
-
-if ${need_gnu_source_def} ; then
-	CPPFLAGS="${CPPFLAGS} -D_GNU_SOURCE=1"
-fi
-
 
 cat >> build.conf <<EOF
 prefix   = ${PREFIX}
