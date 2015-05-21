@@ -174,6 +174,14 @@ Steps.Equal = {
 	end
 }
 
+Steps.Match = {
+	apply = function (self, _, match_re, obj)
+		local re = "^" .. match_re .. "$"
+		return "string matching '" .. re .. "' (got '" .. tostring(obj) .. "')",
+			type(obj) == "string" and obj:match(re) ~= nil
+	end
+}
+
 
 _G.assert = setmetatable({}, {
 	__index = function (table, key)

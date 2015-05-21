@@ -153,6 +153,7 @@ typedef struct {
     ERIS_COMMON_FIELDS;
     const ErisConverter *converter;
     bool                 readonly;
+    char                *declared_type;
 } ErisVariable;
 
 
@@ -281,6 +282,53 @@ make_function_wrapper (lua_State   *L,
 }
 
 
+static Dwarf_Die
+die_get_die_reference_attribute (ErisLibrary *library,
+                                 Dwarf_Die    d_die,
+                                 Dwarf_Half   d_attr_tag,
+                                 Dwarf_Error *d_error)
+{
+    Dwarf_Attribute d_attr = NULL;
+    if (dwarf_attr (d_die, d_attr_tag, &d_attr, d_error) != DW_DLV_OK)
+        return NULL;
+
+    Dwarf_Die d_result_die = NULL;
+    Dwarf_Die d_attr_die;
+    Dwarf_Off d_offset;
+    if (dwarf_global_formref (d_attr,
+                              &d_offset,
+                              d_error) == DW_DLV_OK &&
+        dwarf_offdie (library->d_debug,
+                      d_offset,
+                      &d_attr_die,
+                      d_error) == DW_DLV_OK) {
+        d_result_die = d_attr_die;
+    }
+
+    dwarf_dealloc (library->d_debug, d_attr, DW_DLA_ATTR);
+    return d_result_die;
+}
+
+
+static char*
+die_get_string_attribute (ErisLibrary *library,
+                          Dwarf_Die    d_die,
+                          Dwarf_Half   d_attr_tag,
+                          Dwarf_Error *d_error)
+{
+    Dwarf_Attribute d_attr;
+    if (dwarf_attr (d_die, d_attr_tag, &d_attr, d_error) != DW_DLV_OK)
+        return NULL;
+
+    char *d_result;
+    if (dwarf_formstring (d_attr, &d_result, d_error) != DW_DLV_OK)
+        d_result = NULL;
+
+    dwarf_dealloc (library->d_debug, d_attr, DW_DLA_ATTR);
+    return d_result;
+}
+
+
 static bool
 base_type_to_typeinfo (ErisLibrary  *library,
                        Dwarf_Die     d_type_die,
@@ -334,6 +382,13 @@ base_type_to_typeinfo (ErisLibrary  *library,
     if (dwarf_formudata (d_attr, &d_uval, &d_error) != DW_DLV_OK)
         goto dealloc_attribute;
 
+    if (!typeinfo->name) {
+        Dwarf_Error d_name_error;
+        typeinfo->name = die_get_string_attribute (library,
+                                                   d_type_die,
+                                                   DW_AT_name,
+                                                   &d_name_error);
+    }
     typeinfo->size = d_uval;
     success = true;
 
@@ -341,34 +396,6 @@ dealloc_attribute:
     dwarf_dealloc (library->d_debug, d_attr, DW_DLA_ATTR);
 return_from_function:
     return success;
-}
-
-
-static Dwarf_Die
-die_get_die_reference_attribute (ErisLibrary *library,
-                                 Dwarf_Die    d_die,
-                                 Dwarf_Half   d_attr_tag,
-                                 Dwarf_Error *d_error)
-{
-    Dwarf_Attribute d_attr = NULL;
-    if (dwarf_attr (d_die, d_attr_tag, &d_attr, d_error) != DW_DLV_OK)
-        return NULL;
-
-    Dwarf_Die d_result_die = NULL;
-    Dwarf_Die d_attr_die;
-    Dwarf_Off d_offset;
-    if (dwarf_global_formref (d_attr,
-                              &d_offset,
-                              d_error) == DW_DLV_OK &&
-        dwarf_offdie (library->d_debug,
-                      d_offset,
-                      &d_attr_die,
-                      d_error) == DW_DLV_OK) {
-        d_result_die = d_attr_die;
-    }
-
-    dwarf_dealloc (library->d_debug, d_attr, DW_DLA_ATTR);
-    return d_result_die;
 }
 
 
@@ -408,6 +435,13 @@ die_to_typeinfo (ErisLibrary  *library,
                                                  d_type_die,
                                                  DW_AT_type,
                                                  d_error);
+            if (!typeinfo->name) {
+                Dwarf_Error d_name_error;
+                typeinfo->name = die_get_string_attribute (library,
+                                                           d_type_die,
+                                                           DW_AT_name,
+                                                           &d_name_error);
+            }
             bool success = die_to_typeinfo (library,
                                             d_base_type_die,
                                             typeinfo,
@@ -463,8 +497,9 @@ make_variable_wrapper (lua_State   *L,
 
     ErisVariable *ev = lua_newuserdata(L, sizeof (ErisVariable));
     eris_symbol_init ((ErisSymbol*) ev, library, address, name);
-    ev->readonly  = eris_typeinfo_is_const (&typeinfo);
-    ev->converter = converter;
+    ev->declared_type = typeinfo.name ? strdup (typeinfo.name) : NULL;
+    ev->readonly      = eris_typeinfo_is_const (&typeinfo);
+    ev->converter     = converter;
     luaL_setmetatable (L, ERIS_VARIABLE);
     TRACE ("new ErisVariable* at %p (%p:%s)\n", ev, library, name);
     return 1;
@@ -614,6 +649,7 @@ eris_variable_gc (lua_State *L)
 {
     ErisVariable *ev = to_eris_variable (L);
     TRACE ("%p (%p:%s)\n", ev, ev->library, ev->name);
+    free (ev->declared_type);
     eris_symbol_free ((ErisSymbol*) ev);
     return 0;
 }
@@ -645,12 +681,47 @@ eris_variable_get (lua_State *L)
     return (*ev->converter->getter) (L);
 }
 
+static int
+eris_variable_name (lua_State *L)
+{
+    ErisVariable *ev = to_eris_variable (L);
+    lua_pushstring (L, ev->name);
+    return 1;
+}
+
+static int
+eris_variable_typenames (lua_State *L)
+{
+    ErisVariable *ev = to_eris_variable (L);
+    if (ev->converter->typeinfo.name) {
+        lua_pushstring (L, ev->converter->typeinfo.name);
+    } else {
+        lua_pushnil (L);
+    }
+    if (ev->declared_type) {
+        lua_pushstring (L, ev->declared_type);
+    } else {
+        lua_pushnil (L);
+    }
+    return 2;
+}
+
+static int
+eris_variable_readonly (lua_State *L)
+{
+    ErisVariable *ev = to_eris_variable (L);
+    lua_pushboolean (L, ev->readonly);
+    return 1;
+}
 
 static const luaL_Reg eris_variable_methods[] = {
-    { "__gc",       eris_variable_gc       },
-    { "__tostring", eris_variable_tostring },
-    { "get",        eris_variable_get      },
-    { "set",        eris_variable_set      },
+    { "__gc",       eris_variable_gc        },
+    { "__tostring", eris_variable_tostring  },
+    { "get",        eris_variable_get       },
+    { "set",        eris_variable_set       },
+    { "name",       eris_variable_name      },
+    { "typenames",  eris_variable_typenames },
+    { "readonly",   eris_variable_readonly  },
     { NULL, NULL },
 };
 
