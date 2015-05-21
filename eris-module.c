@@ -45,6 +45,7 @@ typedef enum {
 
 
 typedef struct {
+    const char   *name; /* Optional, may be NULL. */
     ErisTypeKind  kind;
     ErisTypeFlags flags;
     uint16_t      size; /* sizeof (type) */
@@ -72,6 +73,16 @@ eris_typeinfo_equal (const ErisTypeInfo *a,
 
     return a_flags == b_flags;
 }
+
+
+typedef struct {
+    ErisTypeInfo  typeinfo;
+    lua_CFunction getter;
+    lua_CFunction setter;
+} ErisConverter;
+
+
+const ErisConverter* eris_converter_for_typeinfo (const ErisTypeInfo *typeinfo);
 
 
 /*
@@ -140,8 +151,8 @@ typedef struct {
 
 typedef struct {
     ERIS_COMMON_FIELDS;
-    lua_CFunction getter;
-    lua_CFunction setter;
+    const ErisConverter *converter;
+    bool                 readonly;
 } ErisVariable;
 
 
@@ -268,12 +279,6 @@ make_function_wrapper (lua_State   *L,
     TRACE ("new ErisFunction* at %p (%p:%s)\n", ef, library, name);
     return 1;
 }
-
-
-static bool
-find_variable_callbacks (const ErisTypeInfo *typeinfo,
-                         lua_CFunction      *getter,
-                         lua_CFunction      *setter);
 
 
 static bool
@@ -451,15 +456,15 @@ make_variable_wrapper (lua_State   *L,
                            name, dw_errmsg (d_error));
     }
 
-    lua_CFunction getter, setter;
-    if (!find_variable_callbacks (&typeinfo, &getter, &setter)) {
+    const ErisConverter *converter = eris_converter_for_typeinfo (&typeinfo);
+    if (!converter) {
         return luaL_error (L, "%s: Unsupported variable type", name);
     }
 
     ErisVariable *ev = lua_newuserdata(L, sizeof (ErisVariable));
     eris_symbol_init ((ErisSymbol*) ev, library, address, name);
-    ev->getter = getter;
-    ev->setter = eris_typeinfo_is_const (&typeinfo) ? NULL : setter;
+    ev->readonly  = eris_typeinfo_is_const (&typeinfo);
+    ev->converter = converter;
     luaL_setmetatable (L, ERIS_VARIABLE);
     TRACE ("new ErisVariable* at %p (%p:%s)\n", ev, library, name);
     return 1;
@@ -625,18 +630,19 @@ static int
 eris_variable_set (lua_State *L)
 {
     ErisVariable *ev = to_eris_variable (L);
-    if (ev->setter)
-        return (*ev->setter) (L);
-
-    return luaL_error (L, "read-only variable (%p:%s)",
-                       ev->library, ev->name);
+    if (ev->readonly) {
+        return luaL_error (L, "read-only variable (%p:%s)",
+                           ev->library, ev->name);
+    } else {
+        return (*ev->converter->setter) (L);
+    }
 }
 
 static int
 eris_variable_get (lua_State *L)
 {
     ErisVariable *ev = to_eris_variable (L);
-    return (*ev->getter) (L);
+    return (*ev->converter->getter) (L);
 }
 
 
@@ -880,24 +886,19 @@ FLOAT_TYPES (MAKE_FLOAT_GETTER_AND_SETTER)
 #undef MAKE_FLOAT_GETTER_AND_SETTER
 
 
-static const struct {
-    const char   *typename;
-    lua_CFunction getter;
-    lua_CFunction setter;
-    ErisTypeInfo  typeinfo;
-} builtin_type_callbacks[] = {
+static const ErisConverter builtin_converters[] = {
 #define INTEGER_GETTER_SETTER_ITEM(ctype, is_signed) {  \
-    .typename       = #ctype,                           \
     .getter         = eris_variable_get__ ## ctype,     \
     .setter         = eris_variable_set__ ## ctype,     \
+    .typeinfo.name  = #ctype,                           \
     .typeinfo.kind  = ERIS_TYPE_INTEGRAL,               \
     .typeinfo.flags = is_signed ? ERIS_TYPE_SIGNED : 0, \
     .typeinfo.size  = sizeof (ctype) },
 
 #define FLOAT_GETTER_SETTER_ITEM(ctype) {               \
-    .typename       = #ctype,                           \
     .getter         = eris_variable_get__ ## ctype,     \
     .setter         = eris_variable_set__ ## ctype,     \
+    .typeinfo.name  = #ctype,                           \
     .typeinfo.kind  = ERIS_TYPE_FLOAT,                  \
     .typeinfo.flags = ERIS_TYPE_SIGNED,                 \
     .typeinfo.size  = sizeof (ctype) },
@@ -910,19 +911,12 @@ static const struct {
 };
 
 
-static bool
-find_variable_callbacks (const ErisTypeInfo *typeinfo,
-                         lua_CFunction      *getter,
-                         lua_CFunction      *setter)
+const ErisConverter*
+eris_converter_for_typeinfo (const ErisTypeInfo *typeinfo)
 {
-    for (size_t i = 0; i < LENGTH_OF (builtin_type_callbacks); i++) {
-        if (eris_typeinfo_equal (typeinfo, &builtin_type_callbacks[i].typeinfo)) {
-            if (getter)
-                *getter = builtin_type_callbacks[i].getter;
-            if (setter)
-                *setter = builtin_type_callbacks[i].setter;
-            return true;
-        }
+    for (size_t i = 0; LENGTH_OF (builtin_converters); i++) {
+        if (eris_typeinfo_equal (typeinfo, &builtin_converters[i].typeinfo))
+            return &builtin_converters[i];
     }
-    return false;
+    return NULL;
 }
