@@ -593,6 +593,15 @@ return_error:
 }
 
 
+/* Methods for ErisLibrary userdatas. */
+static const luaL_Reg eris_library_methods[] = {
+    { "__gc",       eris_library_gc       },
+    { "__tostring", eris_library_tostring },
+    { "__index",    eris_library_index    },
+    { NULL, NULL }
+};
+
+
 static int
 eris_function_call (lua_State *L)
 {
@@ -600,7 +609,6 @@ eris_function_call (lua_State *L)
     TRACE ("%p (%p:%s)\n", ef, ef->library, ef->name);
     return 0;
 }
-
 
 static int
 eris_function_gc (lua_State *L)
@@ -615,7 +623,6 @@ eris_function_gc (lua_State *L)
     return 0;
 }
 
-
 static int
 eris_function_tostring (lua_State *L)
 {
@@ -624,21 +631,20 @@ eris_function_tostring (lua_State *L)
     return 1;
 }
 
-
-/* Methods for ErisLibrary userdatas. */
-static const luaL_Reg eris_library_methods[] = {
-    { "__gc",       eris_library_gc       },
-    { "__tostring", eris_library_tostring },
-    { "__index",    eris_library_index    },
-    { NULL, NULL }
-};
-
+static int
+eris_function_name (lua_State *L)
+{
+    ErisFunction *ef = to_eris_function (L);
+    lua_pushstring (L, ef->name);
+    return 1;
+}
 
 /* Methods for ErisFunction userdatas. */
 static const luaL_Reg eris_function_methods[] = {
     { "__call",     eris_function_call     },
     { "__gc",       eris_function_gc       },
     { "__tostring", eris_function_tostring },
+    { "name",       eris_function_name     },
     { NULL, NULL }
 };
 
@@ -738,6 +744,8 @@ create_meta (lua_State *L)
 
     /* ErisFunction */
     luaL_newmetatable (L, ERIS_FUNCTION);
+    lua_pushvalue (L, -1);           /* Push metatable */
+    lua_setfield (L, -2, "__index"); /* metatable.__index == metatable */
     luaL_setfuncs (L, eris_function_methods, 0);
     lua_pop (L, 1);
 
