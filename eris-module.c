@@ -32,46 +32,107 @@
 #endif /* !ERIS_LIB_SUFFIX */
 
 
+#define INTEGER_S_TYPES(F) \
+    F (S8,  int8_t  )      \
+    F (S16, int16_t )      \
+    F (S32, int32_t )      \
+    F (S64, int64_t )
+
+#define INTEGER_U_TYPES(F) \
+    F (U8,  uint8_t )      \
+    F (U16, uint16_t)      \
+    F (U32, uint32_t)      \
+    F (U64, uint64_t)
+
+#define INTEGER_TYPES(F) \
+    INTEGER_S_TYPES (F)  \
+    INTEGER_U_TYPES (F)
+
+#define FLOAT_TYPES(F) \
+    F (DOUBLE, double) \
+    F (FLOAT,  float)
+
+
 typedef enum {
-    ERIS_TYPE_INTEGRAL,
+    ERIS_TYPE_NONE = 0,
+
+    ERIS_TYPE_VOID,
+
+    ERIS_TYPE_S8,
+    ERIS_TYPE_U8,
+    ERIS_TYPE_S16,
+    ERIS_TYPE_U16,
+    ERIS_TYPE_S32,
+    ERIS_TYPE_U32,
+    ERIS_TYPE_S64,
+    ERIS_TYPE_U64,
+
     ERIS_TYPE_FLOAT,
-} ErisTypeKind;
+    ERIS_TYPE_DOUBLE,
+
+    ERIS_TYPE_PTR,
+
+    ERIS_TYPE_STRUCT,
+} ErisType;
 
 
-typedef enum {
-    ERIS_TYPE_SIGNED  = 1 << 1,
-    ERIS_TYPE_CONST   = 1 << 2,
-} ErisTypeFlags;
+static inline uint16_t
+eris_type_size (ErisType type)
+{
+#define TYPE_SIZE_ITEM(suffix, ctype) \
+        case ERIS_TYPE_ ## suffix: return sizeof (ctype);
+
+    switch (type) {
+        INTEGER_TYPES (TYPE_SIZE_ITEM)
+        FLOAT_TYPES (TYPE_SIZE_ITEM)
+        default: return 0;
+    }
+
+#undef TYPE_SIZE_ITEM
+}
+
+
+static inline const char*
+eris_type_name (ErisType type)
+{
+#define TYPE_NAME_ITEM(suffix, ctype) \
+        case ERIS_TYPE_ ## suffix: return #ctype;
+
+    switch (type) {
+        INTEGER_TYPES (TYPE_NAME_ITEM)
+        FLOAT_TYPES (TYPE_NAME_ITEM)
+        default: return NULL;
+    }
+
+#undef TYPE_NAME_ITEM
+}
 
 
 typedef struct {
     const char   *name; /* Optional, may be NULL. */
-    ErisTypeKind  kind;
-    ErisTypeFlags flags;
-    uint16_t      size; /* sizeof (type) */
+    ErisType      type;
+    unsigned      size     : 7; /* sizeof (type) */
+    unsigned      readonly : 1;
 } ErisTypeInfo;
 
 
 
-static inline bool
-eris_typeinfo_is_const (const ErisTypeInfo *typeinfo)
-{
-    return (typeinfo->flags & ERIS_TYPE_CONST) == ERIS_TYPE_CONST;
-}
+#define ERIS_TYPEINFO_NONE \
+    ((ErisTypeInfo) { .type = ERIS_TYPE_NONE, 0 })
 
 
 static bool
 eris_typeinfo_equal (const ErisTypeInfo *a,
                      const ErisTypeInfo *b)
 {
-    if (a->kind != b->kind || a->size != b->size)
-        return false;
+    return a->type == b->type && a->size == b->size;
+}
 
-    /* Ignore the ERIS_TYPE_CONST flag. */
-    const ErisTypeFlags a_flags = a->flags & ~ERIS_TYPE_CONST;
-    const ErisTypeFlags b_flags = b->flags & ~ERIS_TYPE_CONST;
 
-    return a_flags == b_flags;
+static inline bool
+eris_typeinfo_is_valid (const ErisTypeInfo *typeinfo)
+{
+    return typeinfo->type != ERIS_TYPE_NONE;
 }
 
 
@@ -330,90 +391,94 @@ die_get_string_attribute (ErisLibrary *library,
 
 
 static bool
-base_type_to_typeinfo (ErisLibrary  *library,
-                       Dwarf_Die     d_type_die,
-                       ErisTypeInfo *typeinfo)
+die_get_uint_attribute (ErisLibrary    *library,
+                        Dwarf_Die       d_die,
+                        Dwarf_Half      d_attr_tag,
+                        Dwarf_Unsigned *d_result,
+                        Dwarf_Error    *d_error)
 {
-    bool success = false;
+    Dwarf_Attribute d_attr;
+    if (dwarf_attr (d_die, d_attr_tag, &d_attr, d_error) != DW_DLV_OK)
+        return false;
 
-    memset (typeinfo, 0x00, sizeof (ErisTypeInfo));
-
-    Dwarf_Error d_error = 0;
-    Dwarf_Attribute d_attr = 0;
-    if (dwarf_attr (d_type_die,
-                    DW_AT_encoding,
-                    &d_attr,
-                    &d_error) != DW_DLV_OK)
-        goto return_from_function;
-
-    Dwarf_Unsigned d_uval = 0;
-    if (dwarf_formudata (d_attr, &d_uval, &d_error) != DW_DLV_OK)
-        goto dealloc_attribute;
-
-    switch (d_uval) {
-        case DW_ATE_float:
-            typeinfo->kind = ERIS_TYPE_FLOAT;
-            typeinfo->flags |= ERIS_TYPE_SIGNED;
-            break;
-
-        case DW_ATE_signed:
-        case DW_ATE_signed_char:
-            typeinfo->kind = ERIS_TYPE_INTEGRAL;
-            typeinfo->flags |= ERIS_TYPE_SIGNED;
-            break;
-
-        case DW_ATE_unsigned:
-        case DW_ATE_unsigned_char:
-            typeinfo->kind = ERIS_TYPE_INTEGRAL;
-            typeinfo->flags &= ~ERIS_TYPE_SIGNED;
-            break;
-
-        default:
-            goto dealloc_attribute;
-    }
-
+    bool success = dwarf_formudata (d_attr, d_result, d_error) == DW_DLV_OK;
     dwarf_dealloc (library->d_debug, d_attr, DW_DLA_ATTR);
-    if (dwarf_attr (d_type_die,
-                    DW_AT_byte_size,
-                    &d_attr,
-                    &d_error) != DW_DLV_OK)
-        goto return_from_function;
-
-    if (dwarf_formudata (d_attr, &d_uval, &d_error) != DW_DLV_OK)
-        goto dealloc_attribute;
-
-    if (!typeinfo->name) {
-        Dwarf_Error d_name_error;
-        typeinfo->name = die_get_string_attribute (library,
-                                                   d_type_die,
-                                                   DW_AT_name,
-                                                   &d_name_error);
-    }
-    typeinfo->size = d_uval;
-    success = true;
-
-dealloc_attribute:
-    dwarf_dealloc (library->d_debug, d_attr, DW_DLA_ATTR);
-return_from_function:
     return success;
 }
 
 
-static bool
+
+static ErisTypeInfo
+die_base_type_get_typeinfo (ErisLibrary *library,
+                            Dwarf_Die    d_type_die,
+                            Dwarf_Error *d_error)
+{
+    Dwarf_Unsigned d_encoding, d_byte_size;
+
+    if (!die_get_uint_attribute (library,
+                                 d_type_die,
+                                 DW_AT_encoding,
+                                 &d_encoding,
+                                 d_error) ||
+        !die_get_uint_attribute (library,
+                                 d_type_die,
+                                 DW_AT_byte_size,
+                                 &d_byte_size,
+                                 d_error))
+            return ERIS_TYPEINFO_NONE;
+
+#define TYPEINFO_ITEM(suffix, ctype)          \
+        case sizeof (ctype):                  \
+            return (ErisTypeInfo) {           \
+                .name = #ctype,               \
+                .type = ERIS_TYPE_ ## suffix, \
+                .size = d_byte_size, 0 };
+
+    switch (d_encoding) {
+        case DW_ATE_float:
+            switch (d_byte_size) { FLOAT_TYPES (TYPEINFO_ITEM) }
+            break;
+        case DW_ATE_signed:
+        case DW_ATE_signed_char:
+            switch (d_byte_size) { INTEGER_S_TYPES (TYPEINFO_ITEM) }
+            break;
+        case DW_ATE_unsigned:
+        case DW_ATE_unsigned_char:
+            switch (d_byte_size) { INTEGER_U_TYPES (TYPEINFO_ITEM) }
+            break;
+    }
+#undef TYPEINFO_ITEM
+
+    return ERIS_TYPEINFO_NONE;
+}
+
+
+static ErisTypeInfo
 die_to_typeinfo (ErisLibrary  *library,
                  Dwarf_Die     d_type_die,
-                 ErisTypeInfo *typeinfo,
                  Dwarf_Error  *d_error)
 {
     Dwarf_Half d_tag;
     if (dwarf_tag (d_type_die,
                    &d_tag,
                    d_error) != DW_DLV_OK)
-        return false;
+        return ERIS_TYPEINFO_NONE;
 
     switch (d_tag) {
-        case DW_TAG_base_type:
-            return base_type_to_typeinfo (library, d_type_die, typeinfo);
+        case DW_TAG_base_type: {
+            ErisTypeInfo typeinfo = die_base_type_get_typeinfo (library,
+                                                                d_type_die,
+                                                                d_error);
+            if (eris_typeinfo_is_valid (&typeinfo)) {
+                Dwarf_Error d_name_error;
+                const char* name = die_get_string_attribute (library,
+                                                             d_type_die,
+                                                             DW_AT_name,
+                                                             &d_name_error);
+                if (name) typeinfo.name = name;
+            }
+            return typeinfo;
+        }
 
         case DW_TAG_const_type: {
             Dwarf_Die d_base_type_die =
@@ -421,36 +486,43 @@ die_to_typeinfo (ErisLibrary  *library,
                                                  d_type_die,
                                                  DW_AT_type,
                                                  d_error);
-            bool success = die_to_typeinfo (library,
-                                            d_base_type_die,
-                                            typeinfo,
-                                            d_error);
+            if (!d_base_type_die)
+                return ERIS_TYPEINFO_NONE;
+
+            ErisTypeInfo typeinfo = die_to_typeinfo (library,
+                                                     d_base_type_die,
+                                                     d_error);
             dwarf_dealloc (library->d_debug, d_base_type_die, DW_DLA_DIE);
-            typeinfo->flags |= ERIS_TYPE_CONST;
-            return success;
+            typeinfo.readonly = true;
+            return typeinfo;
         }
+
         case DW_TAG_typedef: {
             Dwarf_Die d_base_type_die =
                 die_get_die_reference_attribute (library,
                                                  d_type_die,
                                                  DW_AT_type,
                                                  d_error);
-            if (!typeinfo->name) {
+            if (!d_base_type_die)
+                return ERIS_TYPEINFO_NONE;
+
+            ErisTypeInfo typeinfo = die_to_typeinfo (library,
+                                                     d_base_type_die,
+                                                     d_error);
+
+            if (eris_typeinfo_is_valid (&typeinfo)) {
                 Dwarf_Error d_name_error;
-                typeinfo->name = die_get_string_attribute (library,
-                                                           d_type_die,
-                                                           DW_AT_name,
-                                                           &d_name_error);
+                const char *name = die_get_string_attribute (library,
+                                                             d_type_die,
+                                                             DW_AT_name,
+                                                             &d_name_error);
+                if (name) typeinfo.name = name;
             }
-            bool success = die_to_typeinfo (library,
-                                            d_base_type_die,
-                                            typeinfo,
-                                            d_error);
             dwarf_dealloc (library->d_debug, d_base_type_die, DW_DLA_DIE);
-            return success;
+            return typeinfo;
         }
         default:
-            return false;
+            return ERIS_TYPEINFO_NONE;
     }
 }
 
@@ -480,12 +552,13 @@ make_variable_wrapper (lua_State   *L,
                            name, dw_errmsg (d_error));
     }
 
-    ErisTypeInfo typeinfo;
-    bool success = die_to_typeinfo (library, d_type_die, &typeinfo, &d_error);
+    ErisTypeInfo typeinfo = die_to_typeinfo (library,
+                                             d_type_die,
+                                             &d_error);
     dwarf_dealloc (library->d_debug, d_type_die, DW_DLA_DIE);
     dwarf_dealloc (library->d_debug, d_die, DW_DLA_DIE);
 
-    if (!success) {
+    if (!eris_typeinfo_is_valid (&typeinfo)) {
         return luaL_error (L, "%s: Could not convert DIE to ErisTypeInfo (%s)",
                            name, dw_errmsg (d_error));
     }
@@ -498,7 +571,7 @@ make_variable_wrapper (lua_State   *L,
     ErisVariable *ev = lua_newuserdata(L, sizeof (ErisVariable));
     eris_symbol_init ((ErisSymbol*) ev, library, address, name);
     ev->declared_type = typeinfo.name ? strdup (typeinfo.name) : NULL;
-    ev->readonly      = eris_typeinfo_is_const (&typeinfo);
+    ev->readonly      = typeinfo.readonly;
     ev->converter     = converter;
     luaL_setmetatable (L, ERIS_VARIABLE);
     TRACE ("new ErisVariable* at %p (%p:%s)\n", ev, library, name);
@@ -948,22 +1021,8 @@ lookup_die (ErisLibrary *el,
  *       possible to always represent 64-bit numbers. In that case, the 64-bit
  *       types should be left out at compile-time, or wrapped into userdata.
  */
-#define INTEGER_TYPES(F) \
-    F (int8_t,   true )  \
-    F (uint8_t,  false)  \
-    F (int16_t,  true )  \
-    F (uint16_t, false)  \
-    F (int32_t,  true )  \
-    F (uint32_t, false)  \
-    F (int64_t,  true )  \
-    F (uint64_t, false)
 
-#define FLOAT_TYPES(F) \
-    F (double) \
-    F (float)
-
-
-#define MAKE_INTEGER_GETTER_AND_SETTER(ctype, is_signed)     \
+#define MAKE_INTEGER_GETTER_AND_SETTER(suffix, ctype)        \
     static int eris_variable_get__ ## ctype (lua_State *L) { \
         ErisVariable *ev = to_eris_variable (L);             \
         lua_pushinteger (L, *((ctype *) ev->address));       \
@@ -976,7 +1035,7 @@ lookup_die (ErisLibrary *el,
         return 0;                                            \
     }
 
-#define MAKE_FLOAT_GETTER_AND_SETTER(ctype) \
+#define MAKE_FLOAT_GETTER_AND_SETTER(suffix, ctype)          \
     static int eris_variable_get__ ## ctype (lua_State *L) { \
         ErisVariable *ev = to_eris_variable (L);             \
         lua_pushnumber (L, *((ctype *) ev->address));        \
@@ -997,20 +1056,18 @@ FLOAT_TYPES (MAKE_FLOAT_GETTER_AND_SETTER)
 
 
 static const ErisConverter builtin_converters[] = {
-#define INTEGER_GETTER_SETTER_ITEM(ctype, is_signed) {  \
-    .getter         = eris_variable_get__ ## ctype,     \
-    .setter         = eris_variable_set__ ## ctype,     \
-    .typeinfo.name  = #ctype,                           \
-    .typeinfo.kind  = ERIS_TYPE_INTEGRAL,               \
-    .typeinfo.flags = is_signed ? ERIS_TYPE_SIGNED : 0, \
+#define INTEGER_GETTER_SETTER_ITEM(suffix, ctype) { \
+    .getter         = eris_variable_get__ ## ctype, \
+    .setter         = eris_variable_set__ ## ctype, \
+    .typeinfo.name  = #ctype,                       \
+    .typeinfo.type  = ERIS_TYPE_ ## suffix,         \
     .typeinfo.size  = sizeof (ctype) },
 
-#define FLOAT_GETTER_SETTER_ITEM(ctype) {               \
-    .getter         = eris_variable_get__ ## ctype,     \
-    .setter         = eris_variable_set__ ## ctype,     \
-    .typeinfo.name  = #ctype,                           \
-    .typeinfo.kind  = ERIS_TYPE_FLOAT,                  \
-    .typeinfo.flags = ERIS_TYPE_SIGNED,                 \
+#define FLOAT_GETTER_SETTER_ITEM(suffix, ctype) {   \
+    .getter         = eris_variable_get__ ## ctype, \
+    .setter         = eris_variable_set__ ## ctype, \
+    .typeinfo.name  = #ctype,                       \
+    .typeinfo.type  = ERIS_TYPE_ ## suffix,         \
     .typeinfo.size  = sizeof (ctype) },
 
     INTEGER_TYPES (INTEGER_GETTER_SETTER_ITEM)

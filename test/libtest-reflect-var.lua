@@ -21,5 +21,5 @@ function check_variable(variable, expected_name, expected_readonly,
 end
 
 check_variable(libtest.const_int, "const_int", true, "int", "int%d+_t")
-check_variable(libtest.var_u16, "var_u16", false, "unsigned%s[%w%s]+", "uint16_t")
+check_variable(libtest.var_u16, "var_u16", false, "uint16_t", "uint16_t")
 check_variable(libtest.intvar, "intvar", false, "int", "int%d+_t")
