@@ -13,6 +13,7 @@ function check_variable (variable, expected_value)
 	assert.Not.Callable(variable)
 	assert.Field(variable, "get")
 	assert.Equal(expected_value, variable:get())
+	assert.Equal(libtest, variable:library())
 	variable:set(100)
 	assert.Equal(100, variable:get())
 end

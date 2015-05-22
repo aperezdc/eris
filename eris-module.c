@@ -115,9 +115,9 @@ eris_library_push_userdata (lua_State *L, ErisLibrary *el)
 }
 
 static inline ErisLibrary*
-to_eris_library (lua_State *L)
+to_eris_library (lua_State *L, int index)
 {
-    return *((ErisLibrary**) luaL_checkudata (L, 1, ERIS_LIBRARY));
+    return *((ErisLibrary**) luaL_checkudata (L, index, ERIS_LIBRARY));
 }
 
 
@@ -224,7 +224,7 @@ void eris_library_free (ErisLibrary *el)
 static int
 eris_library_gc (lua_State *L)
 {
-    ErisLibrary *el = to_eris_library (L);
+    ErisLibrary *el = to_eris_library (L, 1);
     TRACE ("%p\n", el);
     eris_library_unref (el);
     return 0;
@@ -234,7 +234,7 @@ eris_library_gc (lua_State *L)
 static int
 eris_library_tostring (lua_State *L)
 {
-    ErisLibrary *el = to_eris_library (L);
+    ErisLibrary *el = to_eris_library (L, 1);
     if (el->d_debug) {
         lua_pushfstring (L, "eris.library (%p)", el->d_debug);
     } else {
@@ -509,7 +509,7 @@ make_variable_wrapper (lua_State   *L,
 static int
 eris_library_index (lua_State *L)
 {
-    ErisLibrary *e = to_eris_library (L);
+    ErisLibrary *e = to_eris_library (L, 1);
     const char *name = luaL_checkstring (L, 2);
     const char *error = "unknown error";
 
@@ -592,12 +592,22 @@ return_error:
     return 2;
 }
 
+static int
+eris_library_eq (lua_State *L)
+{
+    ErisLibrary *el_self  = to_eris_library (L, 1);
+    ErisLibrary *el_other = to_eris_library (L, 2);
+    lua_pushboolean (L, el_self == el_other);
+    return 1;
+}
+
 
 /* Methods for ErisLibrary userdatas. */
 static const luaL_Reg eris_library_methods[] = {
     { "__gc",       eris_library_gc       },
     { "__tostring", eris_library_tostring },
     { "__index",    eris_library_index    },
+    { "__eq",       eris_library_eq       },
     { NULL, NULL }
 };
 
@@ -639,12 +649,21 @@ eris_function_name (lua_State *L)
     return 1;
 }
 
+static int
+eris_function_library (lua_State *L)
+{
+    ErisFunction *ef = to_eris_function (L);
+    eris_library_push_userdata (L, ef->library);
+    return 1;
+}
+
 /* Methods for ErisFunction userdatas. */
 static const luaL_Reg eris_function_methods[] = {
     { "__call",     eris_function_call     },
     { "__gc",       eris_function_gc       },
     { "__tostring", eris_function_tostring },
     { "name",       eris_function_name     },
+    { "library",    eris_function_library  },
     { NULL, NULL }
 };
 
@@ -720,6 +739,14 @@ eris_variable_readonly (lua_State *L)
     return 1;
 }
 
+static int
+eris_variable_library (lua_State *L)
+{
+    ErisVariable *ev = to_eris_variable (L);
+    eris_library_push_userdata (L, ev->library);
+    return 1;
+}
+
 static const luaL_Reg eris_variable_methods[] = {
     { "__gc",       eris_variable_gc        },
     { "__tostring", eris_variable_tostring  },
@@ -728,6 +755,7 @@ static const luaL_Reg eris_variable_methods[] = {
     { "name",       eris_variable_name      },
     { "typenames",  eris_variable_typenames },
     { "readonly",   eris_variable_readonly  },
+    { "library",    eris_variable_library   },
     { NULL, NULL },
 };
 

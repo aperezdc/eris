@@ -14,6 +14,7 @@ function check_variable(variable, expected_name, expected_readonly,
 	assert.Not.Nil(variable)
 	local precise_type, declared_type = variable:typenames()
 	assert.Equal(expected_name, variable:name())
+	assert.Equal(libtest, variable:library())
 	assert.Equal(expected_readonly, variable:readonly())
 	assert.Match(expected_precise_type, precise_type)
 	assert.Match(expected_declared_type, declared_type)

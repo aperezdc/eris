@@ -13,3 +13,4 @@ local add = libtest.add
 assert.Not.Nil(add)
 assert.Userdata(add, "org.perezdecastro.eris.Function")
 assert.Callable(add)
+assert.Equal(libtest, add:library())

@@ -13,6 +13,7 @@ for _, varname in ipairs { "var_flt", "var_dbl" } do
 	assert.Not.Nil(variable)
 	assert.Not.Callable(variable)
 	assert.Equal(1.0, variable:get())
+	assert.Equal(libtest, variable:library())
 
 	-- Set a floating point value.
 	variable:set(-42.5)
