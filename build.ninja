@@ -94,9 +94,11 @@ $obj/lua.lzio.o
 
 #$obj/lua.luac.o     $
 
+build $obj/eris-util.o : cc eris-util.c
 build $obj/eris-trace.o : cc eris-trace.c
 build $obj/eris-module.o : cc eris-module.c
 build $obj/eris.so : ld $
+$obj/eris-util.o $
 $obj/eris-trace.o $
 $obj/eris-module.o | $obj/eris
   ldflags = $ldflags -shared

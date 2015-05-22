@@ -45,7 +45,7 @@ LUA_SRCS := $(addprefix lua/src/,${LUA_SRCS})
 LUA_OBJS := $(patsubst %.c,${OUT}/%.o,${LUA_SRCS})
 
 # Eris (non-JIT) module sources.
-ERIS_MODULE_SRCS := eris-module.c eris-trace.c
+ERIS_MODULE_SRCS := eris-module.c eris-trace.c eris-util.c
 ERIS_MODULE_OBJS := $(patsubst %.c,${OUT}/%.o,${ERIS_MODULE_SRCS})
 
 # Testutil module source.

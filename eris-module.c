@@ -535,6 +535,7 @@ eris_library_index (lua_State *L)
      *       DIEs must be always exported globals. Maybe this can be turned
      *       into a debug-build-only check. Plus: dlsym() won't resolve it.
      */
+#if ERIS_RUNTIME_CHECKS
     bool symbol_is_private = true;
     Dwarf_Error d_error = 0;
     Dwarf_Attribute d_attr = 0;
@@ -550,6 +551,8 @@ eris_library_index (lua_State *L)
         }
         dwarf_dealloc (e->d_debug, d_attr, DW_DLA_ATTR);
     }
+    CHECK (!symbol_is_private);
+#endif /* ERIS_RUNTIME_CHECKS */
 
     if (symbol_is_private) {
         error = "symbol is private";
