@@ -18,6 +18,8 @@ Options:
   --verbose         Print additional messages.
   --commands        Print commands used to run the test cases.
   --help            Display this help message.
+  --debug           Run test case under a debugger.
+  --debugger=CMD    Use CMD as debugger command (default: gdb --args).
 
 Output formats:
 
@@ -41,9 +43,11 @@ end
 
 local tests = {}
 local options = {
+	debugger = "gdb --args",
 	output   = "auto",
 	commands = false,
 	verbose  = false,
+	debug    = false,
 }
 
 
@@ -68,7 +72,7 @@ for i = 3, #arg do
 	-- Try a flag with value first. If there is no match, then try for a
 	-- boolean flag. If neither matches, assume the option is a test name.
 
-	local name, value = opt:match("^%-%-(%w[%w%-]*)=(%w+)$")
+	local name, value = opt:match("^%-%-(%w[%w%-]*)=(.+)$")
 	if name == nil then
 		name = opt:match("^%-%-(%w[%w%-]*)$")
 	end
@@ -399,7 +403,15 @@ else
 end
 
 
-if options.commands then
+if options.debug then
+	if #tests > 1 then
+		die("Running a debugger supports only a single test case.\n");
+	end
+	local command = options.debugger .. " " .. tests[1]:command()
+	verbose("LUA_INIT='%s'\n", os.getenv("LUA_INIT") or "")
+	printf("Debug command: %s\n", command)
+	os.execute(command)
+elseif options.commands then
 	local lua_init = os.getenv("LUA_INIT")
 	local cwd = tu.getcwd()
 	if lua_init then
