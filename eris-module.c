@@ -599,16 +599,16 @@ eris_library_index (lua_State *L)
                            "for symbol '%s' (library %p)", name, e);
     }
 
+#if ERIS_RUNTIME_CHECKS
     /*
      * Check that the variable/function is an exported global, i.e. it has
      * the DW_AT_external attribute. If the attribute is missing, assume
      * that we can proceed.
      *
-     * TODO: Provided that lookup_die() uses the list of DWARF globals, all
-     *       DIEs must be always exported globals. Maybe this can be turned
-     *       into a debug-build-only check. Plus: dlsym() won't resolve it.
+     * Note that lookup_die() uses the list of DWARF globals, all DIEs must
+     * be always exported globals. Also, dlsym() will not resolve private
+     * symbols. So, this is built as an optional a sanity check.
      */
-#if ERIS_RUNTIME_CHECKS
     bool symbol_is_private = true;
     Dwarf_Error d_error = 0;
     Dwarf_Attribute d_attr = 0;
