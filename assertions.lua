@@ -170,7 +170,8 @@ Steps.Userdata = {
 
 Steps.Equal = {
 	apply = function (self, _, expected, obj)
-		return tostring(expected), expected == obj
+		return tostring(expected) .. " (got '" .. tostring(obj) .. "')",
+			expected == obj
 	end
 }
 
