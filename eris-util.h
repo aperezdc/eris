@@ -8,6 +8,9 @@
 #ifndef ERIS_UTIL_H
 #define ERIS_UTIL_H
 
+#include <inttypes.h>
+
+
 #define LENGTH_OF(array) \
     (sizeof (array) / sizeof (array[0]))
 
@@ -25,20 +28,26 @@
             CHECK_FAILED ("expression: %s\n", #expression); \
     } while (0)
 
-# define CHECK_NUMERIC_EQ(expect, expr, type, va_type, fmt) \
+# define CHECK_NUMERIC_OP(op, expect, expr, type, fmt)      \
     do {                                                    \
         type eval_expect = (expect);                        \
         type eval_expr = (expr);                            \
-        if (eval_expect != eval_expr)                       \
+        if (!(eval_expect op eval_expr))                    \
             CHECK_FAILED ("expression: %s\n"                \
-                          "expected: " fmt "\n"             \
-                          "value: " fmt "\n",               \
-                          #expr,                            \
-                          (va_type) eval_expect,            \
-                          (va_type) eval_expr);             \
+                          "expected: " #op " %" fmt "\n"    \
+                          "value: %" fmt "\n",              \
+                          #expr, eval_expect, eval_expr);   \
     } while (0)
 
-#define CHECK_STR_EQ(expected, expression)                  \
+# define CHECK_NOT_NULL(expression)                         \
+    do {                                                    \
+        if ((expression) == NULL)                           \
+            CHECK_FAILED ("expression: %s\n"                \
+                          "expected: non-NULL\n",           \
+                          #expression);                     \
+    } while (0)
+
+# define CHECK_STR_EQ(expected, expression)                 \
     do {                                                    \
         const char *eval_expected = (expected);             \
         const char *eval_expression = (expression);         \
@@ -59,21 +68,33 @@ extern void eris_runtime_check_failed (const char *file,
 #else /* !ERIS_DEBUG_CHECKS */
 # undef ERIS_RUNTIME_CHECKS
 # define ERIS_RUNTIME_CHECKS 0
-# define CHECK(e)                         ((void) 0)
-# define CHECK_NUMERIC_EQ(e, x, t, vt, f) ((void) 0)
-# define CHECK_STR_EQ(e, x)               ((void) 0)
+# define CHECK(e)                            ((void) 0)
+# define CHECK_NUMERIC_OP(o, e, x, t, vt, f) ((void) 0)
+# define CHECK_NOT_NULL(e)                   ((void) 0)
+# define CHECK_STR_EQ(e, x)                  ((void) 0)
 #endif /* ERIS_DEBUG_CHECKS */
 
-#define CHECK_I8_EQ(e, x)    CHECK_NUMERIC_EQ (e, x, int8_t, int, "%i")
-#define CHECK_U8_EQ(e, x)    CHECK_NUMERIC_EQ (e, x, uint8_t, unsigned, "%u")
-#define CHECK_I16_EQ(e, x)   CHECK_NUMERIC_EQ (e, x, int16_t, int, "%i")
-#define CHECK_U16_EQ(e, x)   CHECK_NUMERIC_EQ (e, x, uint16_t, unsigned, "%u")
-#define CHECK_I32_EQ(e, x)   CHECK_NUMERIC_EQ (e, x, int32_t, long, "%li")
-#define CHECK_U32_EQ(e, x)   CHECK_NUMERIC_EQ (e, x, uint32_t, unsigned long, "%lu")
-#define CHECK_INT_EQ(e, x)   CHECK_NUMERIC_EQ (e, x, int, int, "%i")
-#define CHECK_UINT_EQ(e, x)  CHECK_NUMERIC_EQ (e, x, unsigned, unsigned, "%u")
-#define CHECK_SIZE_EQ(e, x)  CHECK_NUMERIC_EQ (e, x, size_t, unsigned long long, "%llu")
-#define CHECK_SSIZE_EQ(e, x) CHECK_NUMERIC_EQ (e, x, ssize_t, long long, "%lli")
+#define CHECK_I8_EQ(e, x)    CHECK_NUMERIC_OP (==, e, x, int8_t,   PRIi8)
+#define CHECK_U8_EQ(e, x)    CHECK_NUMERIC_OP (==, e, x, uint8_t,  PRIu8)
+#define CHECK_I16_EQ(e, x)   CHECK_NUMERIC_OP (==, e, x, int16_t,  PRIi16)
+#define CHECK_U16_EQ(e, x)   CHECK_NUMERIC_OP (==, e, x, uint16_t, PRIu16)
+#define CHECK_I32_EQ(e, x)   CHECK_NUMERIC_OP (==, e, x, int32_t,  PRIi32)
+#define CHECK_U32_EQ(e, x)   CHECK_NUMERIC_OP (==, e, x, uint32_t, PRIu32)
+#define CHECK_INT_EQ(e, x)   CHECK_NUMERIC_OP (==, e, x, int,      "i")
+#define CHECK_UINT_EQ(e, x)  CHECK_NUMERIC_OP (==, e, x, unsigned, "u")
+#define CHECK_SIZE_EQ(e, x)  CHECK_NUMERIC_OP (==, e, x, size_t,   PRIuMAX)
+#define CHECK_SSIZE_EQ(e, x) CHECK_NUMERIC_OP (==, e, x, ssize_t,  PRIiMAX)
+
+#define CHECK_I8_LT(e, x)    CHECK_NUMERIC_OP (< , e, x, int8_t,   PRIi8)
+#define CHECK_U8_LT(e, x)    CHECK_NUMERIC_OP (< , e, x, uint8_t,  PRIu8)
+#define CHECK_I16_LT(e, x)   CHECK_NUMERIC_OP (< , e, x, int16_t,  PRIi16)
+#define CHECK_U16_LT(e, x)   CHECK_NUMERIC_OP (< , e, x, uint16_t, PRIu16)
+#define CHECK_I32_LT(e, x)   CHECK_NUMERIC_OP (< , e, x, int32_t,  PRIi32)
+#define CHECK_U32_LT(e, x)   CHECK_NUMERIC_OP (< , e, x, uint32_t, PRIu32)
+#define CHECK_INT_LT(e, x)   CHECK_NUMERIC_OP (< , e, x, int,      "i")
+#define CHECK_UINT_LT(e, x)  CHECK_NUMERIC_OP (< , e, x, unsigned, "u")
+#define CHECK_SIZE_LT(e, x)  CHECK_NUMERIC_OP (< , e, x, size_t,   PRIuMAX)
+#define CHECK_SSIZE_LT(e, x) CHECK_NUMERIC_OP (< , e, x, ssize_t,  PRIiMAX)
 
 
 /*
