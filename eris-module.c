@@ -8,6 +8,7 @@
 #include "lua/src/lua.h"
 #include "lua/src/lauxlib.h"
 
+#include "eris-typing.h"
 #include "eris-trace.h"
 #include "eris-util.h"
 
@@ -32,124 +33,14 @@
 #endif /* !ERIS_LIB_SUFFIX */
 
 
-#define INTEGER_S_TYPES(F) \
-    F (S8,  int8_t  )      \
-    F (S16, int16_t )      \
-    F (S32, int32_t )      \
-    F (S64, int64_t )
+typedef struct _ErisLibrary  ErisLibrary;
 
-#define INTEGER_U_TYPES(F) \
-    F (U8,  uint8_t )      \
-    F (U16, uint16_t)      \
-    F (U32, uint32_t)      \
-    F (U64, uint64_t)
-
-#define INTEGER_TYPES(F) \
-    INTEGER_S_TYPES (F)  \
-    INTEGER_U_TYPES (F)
-
-#define FLOAT_TYPES(F) \
-    F (DOUBLE, double) \
-    F (FLOAT,  float)
-
-
-typedef enum {
-    ERIS_TYPE_NONE = 0,
-
-    ERIS_TYPE_VOID,
-
-    ERIS_TYPE_S8,
-    ERIS_TYPE_U8,
-    ERIS_TYPE_S16,
-    ERIS_TYPE_U16,
-    ERIS_TYPE_S32,
-    ERIS_TYPE_U32,
-    ERIS_TYPE_S64,
-    ERIS_TYPE_U64,
-
-    ERIS_TYPE_FLOAT,
-    ERIS_TYPE_DOUBLE,
-
-    ERIS_TYPE_PTR,
-
-    ERIS_TYPE_STRUCT,
-} ErisType;
-
-
-static inline uint16_t
-eris_type_size (ErisType type)
-{
-#define TYPE_SIZE_ITEM(suffix, ctype) \
-        case ERIS_TYPE_ ## suffix: return sizeof (ctype);
-
-    switch (type) {
-        INTEGER_TYPES (TYPE_SIZE_ITEM)
-        FLOAT_TYPES (TYPE_SIZE_ITEM)
-        default: return 0;
-    }
-
-#undef TYPE_SIZE_ITEM
-}
-
-
-static inline const char*
-eris_type_name (ErisType type)
-{
-#define TYPE_NAME_ITEM(suffix, ctype) \
-        case ERIS_TYPE_ ## suffix: return #ctype;
-
-    switch (type) {
-        INTEGER_TYPES (TYPE_NAME_ITEM)
-        FLOAT_TYPES (TYPE_NAME_ITEM)
-        default: return NULL;
-    }
-
-#undef TYPE_NAME_ITEM
-}
-
-
-typedef struct {
-    const char   *name; /* Optional, may be NULL. */
-    ErisType      type;
-    unsigned      size     : 7; /* sizeof (type) */
-    unsigned      readonly : 1;
-} ErisTypeInfo;
-
-
-
-#define ERIS_TYPEINFO_NONE \
-    ((ErisTypeInfo) { .type = ERIS_TYPE_NONE, 0 })
-
-
-static bool
-eris_typeinfo_equal (const ErisTypeInfo *a,
-                     const ErisTypeInfo *b)
-{
-    return a->type == b->type && a->size == b->size;
-}
-
-
-static inline bool
-eris_typeinfo_is_valid (const ErisTypeInfo *typeinfo)
-{
-    return typeinfo->type != ERIS_TYPE_NONE;
-}
-
-
-typedef struct {
-    ErisTypeInfo  typeinfo;
-    lua_CFunction getter;
-    lua_CFunction setter;
-} ErisConverter;
-
-
-const ErisConverter* eris_converter_for_typeinfo (const ErisTypeInfo *typeinfo);
 
 
 /*
  * Data needed for each library loaded by "eris.load()".
  */
-typedef struct {
+struct _ErisLibrary {
     REF_COUNTER;
 
     int           fd;
@@ -158,7 +49,7 @@ typedef struct {
     Dwarf_Debug   d_debug;
     Dwarf_Global *d_globals;
     Dwarf_Signed  d_num_globals;
-} ErisLibrary;
+};
 
 
 static const char ERIS_LIBRARY[]  = "org.perezdecastro.eris.Library";
@@ -170,6 +61,8 @@ REF_COUNTER_FUNCTIONS (ErisLibrary, eris_library, static inline)
 static inline void
 eris_library_push_userdata (lua_State *L, ErisLibrary *el)
 {
+    CHECK_NOT_NULL (el);
+
     ErisLibrary **elp = lua_newuserdata (L, sizeof (ErisLibrary*));
     *elp = eris_library_ref (el);
     luaL_setmetatable (L, ERIS_LIBRARY);
@@ -182,7 +75,93 @@ to_eris_library (lua_State *L, int index)
 }
 
 
-static Dwarf_Die lookup_die (ErisLibrary *el, const void *address, const char *name);
+static const char ERIS_TYPEINFO[] = "org.perezdecastro.eris.TypeInfo";
+
+static inline void
+eris_typeinfo_push_userdata (lua_State *L, const ErisTypeInfo *ti)
+{
+    CHECK_NOT_NULL (ti);
+
+    const ErisTypeInfo **tip = lua_newuserdata (L, sizeof (const ErisTypeInfo*));
+    *tip = ti;
+    luaL_setmetatable (L, ERIS_TYPEINFO);
+}
+
+static inline const ErisTypeInfo*
+to_eris_typeinfo (lua_State *L, int index)
+{
+    return *((const ErisTypeInfo**) luaL_checkudata (L, index, ERIS_TYPEINFO));
+}
+
+
+static int
+l_eris_typeinfo_tostring (lua_State *L)
+{
+    const ErisTypeInfo *typeinfo = to_eris_typeinfo (L, 1);
+    lua_pushfstring (L,
+                     "eris.type (%p:%s)",
+                     typeinfo,
+                     eris_typeinfo_name (typeinfo));
+    return 1;
+}
+
+static int
+l_eris_typeinfo_index (lua_State *L)
+{
+    const ErisTypeInfo *typeinfo = to_eris_typeinfo (L, 1);
+    lua_settop (L, 2);
+    if (lua_isstring (L, 2)) {
+        const char *field = lua_tostring (L, 2);
+        if (!strcmp ("name", field)) {
+            lua_pushstring (L, eris_typeinfo_name (typeinfo));
+        } else if (!strcmp ("sizeof", field)) {
+            lua_pushinteger (L, eris_typeinfo_sizeof (typeinfo));
+        } else if (!strcmp ("readonly", field)) {
+            lua_pushboolean (L, eris_typeinfo_is_readonly (typeinfo));
+        } else {
+            return luaL_error (L, "invalid field '%s'", field);
+        }
+        return 1;
+    } else {
+        lua_Integer index = luaL_checkinteger (L, 2);
+        if (index < 1)
+            return luaL_error (L, "invalid index: %i", index);
+        const ErisTypeInfoMember *member =
+                eris_typeinfo_const_member (typeinfo, index);
+        lua_pushstring (L, member->name);
+        eris_typeinfo_push_userdata (L, member->typeinfo);
+        lua_pushinteger (L, member->offset);
+        return 3;
+    }
+}
+
+static int
+l_eris_typeinfo_len (lua_State *L)
+{
+    const ErisTypeInfo *typeinfo = to_eris_typeinfo (L, 1);
+    lua_pushinteger (L, eris_typeinfo_n_members (typeinfo));
+    return 1;
+}
+
+static int
+l_eris_typeinfo_eq (lua_State *L)
+{
+    const ErisTypeInfo *typeinfo_a = to_eris_typeinfo (L, 1);
+    const ErisTypeInfo *typeinfo_b = to_eris_typeinfo (L, 2);
+    lua_pushboolean (L, eris_typeinfo_equal (typeinfo_a, typeinfo_b));
+    return 1;
+}
+
+static const luaL_Reg eris_typeinfo_methods[] = {
+    { "__tostring", l_eris_typeinfo_tostring  },
+    { "__index",    l_eris_typeinfo_index     },
+    { "__len",      l_eris_typeinfo_len       },
+    { "__eq",       l_eris_typeinfo_eq        },
+    { NULL, NULL },
+};
+
+
+static Dwarf_Die lookup_die (ErisLibrary *el, const char *name);
 
 
 /*
@@ -212,9 +191,7 @@ typedef struct {
 
 typedef struct {
     ERIS_COMMON_FIELDS;
-    const ErisConverter *converter;
-    bool                 readonly;
-    char                *declared_type;
+    const ErisTypeInfo  *typeinfo;
 } ErisVariable;
 
 
@@ -408,7 +385,7 @@ die_get_uint_attribute (ErisLibrary    *library,
 
 
 
-static ErisTypeInfo
+static ErisTypeInfo*
 die_base_type_get_typeinfo (ErisLibrary *library,
                             Dwarf_Die    d_type_die,
                             Dwarf_Error *d_error)
@@ -425,14 +402,11 @@ die_base_type_get_typeinfo (ErisLibrary *library,
                                  DW_AT_byte_size,
                                  &d_byte_size,
                                  d_error))
-            return ERIS_TYPEINFO_NONE;
+            return NULL;
 
-#define TYPEINFO_ITEM(suffix, ctype)          \
-        case sizeof (ctype):                  \
-            return (ErisTypeInfo) {           \
-                .name = #ctype,               \
-                .type = ERIS_TYPE_ ## suffix, \
-                .size = d_byte_size, 0 };
+#define TYPEINFO_ITEM(suffix, ctype)                            \
+        case sizeof (ctype):                                    \
+            return eris_typeinfo_new (ERIS_TYPE_ ## suffix, 0); \
 
     switch (d_encoding) {
         case DW_ATE_float:
@@ -449,11 +423,11 @@ die_base_type_get_typeinfo (ErisLibrary *library,
     }
 #undef TYPEINFO_ITEM
 
-    return ERIS_TYPEINFO_NONE;
+    return NULL;
 }
 
 
-static ErisTypeInfo
+static ErisTypeInfo*
 die_to_typeinfo (ErisLibrary  *library,
                  Dwarf_Die     d_type_die,
                  Dwarf_Error  *d_error)
@@ -462,20 +436,20 @@ die_to_typeinfo (ErisLibrary  *library,
     if (dwarf_tag (d_type_die,
                    &d_tag,
                    d_error) != DW_DLV_OK)
-        return ERIS_TYPEINFO_NONE;
+        return NULL;
 
     switch (d_tag) {
         case DW_TAG_base_type: {
-            ErisTypeInfo typeinfo = die_base_type_get_typeinfo (library,
-                                                                d_type_die,
-                                                                d_error);
-            if (eris_typeinfo_is_valid (&typeinfo)) {
+            ErisTypeInfo *typeinfo = die_base_type_get_typeinfo (library,
+                                                                 d_type_die,
+                                                                 d_error);
+            if (eris_typeinfo_is_valid (typeinfo)) {
                 Dwarf_Error d_name_error;
                 const char* name = die_get_string_attribute (library,
                                                              d_type_die,
                                                              DW_AT_name,
                                                              &d_name_error);
-                if (name) typeinfo.name = name;
+                if (name) eris_typeinfo_set_name (typeinfo, name);
             }
             return typeinfo;
         }
@@ -487,13 +461,13 @@ die_to_typeinfo (ErisLibrary  *library,
                                                  DW_AT_type,
                                                  d_error);
             if (!d_base_type_die)
-                return ERIS_TYPEINFO_NONE;
+                return NULL;
 
-            ErisTypeInfo typeinfo = die_to_typeinfo (library,
-                                                     d_base_type_die,
-                                                     d_error);
+            ErisTypeInfo *typeinfo = die_to_typeinfo (library,
+                                                      d_base_type_die,
+                                                      d_error);
             dwarf_dealloc (library->d_debug, d_base_type_die, DW_DLA_DIE);
-            typeinfo.readonly = true;
+            eris_typeinfo_set_is_readonly (typeinfo, true);
             return typeinfo;
         }
 
@@ -504,25 +478,25 @@ die_to_typeinfo (ErisLibrary  *library,
                                                  DW_AT_type,
                                                  d_error);
             if (!d_base_type_die)
-                return ERIS_TYPEINFO_NONE;
+                return NULL;
 
-            ErisTypeInfo typeinfo = die_to_typeinfo (library,
-                                                     d_base_type_die,
-                                                     d_error);
+            ErisTypeInfo *typeinfo = die_to_typeinfo (library,
+                                                      d_base_type_die,
+                                                      d_error);
 
-            if (eris_typeinfo_is_valid (&typeinfo)) {
+            if (eris_typeinfo_is_valid (typeinfo)) {
                 Dwarf_Error d_name_error;
                 const char *name = die_get_string_attribute (library,
                                                              d_type_die,
                                                              DW_AT_name,
                                                              &d_name_error);
-                if (name) typeinfo.name = name;
+                if (name) eris_typeinfo_set_name (typeinfo, name);
             }
             dwarf_dealloc (library->d_debug, d_base_type_die, DW_DLA_DIE);
             return typeinfo;
         }
         default:
-            return ERIS_TYPEINFO_NONE;
+            return NULL;
     }
 }
 
@@ -552,27 +526,20 @@ make_variable_wrapper (lua_State   *L,
                            name, dw_errmsg (d_error));
     }
 
-    ErisTypeInfo typeinfo = die_to_typeinfo (library,
-                                             d_type_die,
-                                             &d_error);
+    ErisTypeInfo *typeinfo = die_to_typeinfo (library,
+                                              d_type_die,
+                                              &d_error);
     dwarf_dealloc (library->d_debug, d_type_die, DW_DLA_DIE);
     dwarf_dealloc (library->d_debug, d_die, DW_DLA_DIE);
 
-    if (!eris_typeinfo_is_valid (&typeinfo)) {
+    if (!typeinfo || !eris_typeinfo_is_valid (typeinfo)) {
         return luaL_error (L, "%s: Could not convert DIE to ErisTypeInfo (%s)",
                            name, dw_errmsg (d_error));
     }
 
-    const ErisConverter *converter = eris_converter_for_typeinfo (&typeinfo);
-    if (!converter) {
-        return luaL_error (L, "%s: Unsupported variable type", name);
-    }
-
-    ErisVariable *ev = lua_newuserdata(L, sizeof (ErisVariable));
+    ErisVariable *ev = lua_newuserdata (L, sizeof (ErisVariable));
     eris_symbol_init ((ErisSymbol*) ev, library, address, name);
-    ev->declared_type = typeinfo.name ? strdup (typeinfo.name) : NULL;
-    ev->readonly      = typeinfo.readonly;
-    ev->converter     = converter;
+    ev->typeinfo  = typeinfo;
     luaL_setmetatable (L, ERIS_VARIABLE);
     TRACE ("new ErisVariable* at %p (%p:%s)\n", ev, library, name);
     return 1;
@@ -593,7 +560,7 @@ eris_library_index (lua_State *L)
         goto return_error;
     }
 
-    Dwarf_Die d_die = lookup_die (e, address, name);
+    Dwarf_Die d_die = lookup_die (e, name);
     if (!d_die) {
         return luaL_error (L, "could not look up DWARF debug information "
                            "for symbol '%s' (library %p)", name, e);
@@ -750,7 +717,6 @@ eris_variable_gc (lua_State *L)
 {
     ErisVariable *ev = to_eris_variable (L);
     TRACE ("%p (%p:%s)\n", ev, ev->library, ev->name);
-    free (ev->declared_type);
     eris_symbol_free ((ErisSymbol*) ev);
     return 0;
 }
@@ -767,19 +733,58 @@ static int
 eris_variable_set (lua_State *L)
 {
     ErisVariable *ev = to_eris_variable (L);
-    if (ev->readonly) {
+    if (eris_typeinfo_is_readonly (ev->typeinfo)) {
         return luaL_error (L, "read-only variable (%p:%s)",
                            ev->library, ev->name);
-    } else {
-        return (*ev->converter->setter) (L);
     }
+
+#define SET_INTEGER(suffix, ctype) \
+        case ERIS_TYPE_ ## suffix: \
+            *((ctype*) ev->address) = (ctype) luaL_checkinteger (L, 2); \
+            break;
+#define SET_FLOAT(suffix, ctype) \
+        case ERIS_TYPE_ ## suffix: \
+            *((ctype*) ev->address) = (ctype) luaL_checknumber (L, 2); \
+            break;
+
+    switch (eris_typeinfo_type (ev->typeinfo)) {
+        INTEGER_TYPES (SET_INTEGER)
+        FLOAT_TYPES (SET_FLOAT)
+        default:
+            return luaL_error (L, "no setter for variable (%p:%s)",
+                               ev->library, ev->name);
+    }
+
+#undef SET_INTEGER
+#undef SET_FLOAT
+    return 0;
 }
 
 static int
 eris_variable_get (lua_State *L)
 {
     ErisVariable *ev = to_eris_variable (L);
-    return (*ev->converter->getter) (L);
+
+#define GET_INTEGER(suffix, ctype) \
+        case ERIS_TYPE_ ## suffix: \
+            lua_pushinteger (L, *((ctype*) ev->address)); \
+            break;
+#define GET_FLOAT(suffix, ctype) \
+        case ERIS_TYPE_ ## suffix: \
+            lua_pushnumber (L, *((ctype*) ev->address)); \
+            break;
+
+    switch (eris_typeinfo_type (ev->typeinfo)) {
+        INTEGER_TYPES (GET_INTEGER)
+        FLOAT_TYPES (GET_FLOAT)
+        default:
+            return luaL_error (L, "no getter for variable (%p:%s)",
+                               ev->library, ev->name);
+    }
+
+#undef GET_INTEGER
+#undef GET_FLOAT
+    return 1;
 }
 
 static int
@@ -791,27 +796,10 @@ eris_variable_name (lua_State *L)
 }
 
 static int
-eris_variable_typenames (lua_State *L)
+eris_variable_type (lua_State *L)
 {
     ErisVariable *ev = to_eris_variable (L);
-    if (ev->converter->typeinfo.name) {
-        lua_pushstring (L, ev->converter->typeinfo.name);
-    } else {
-        lua_pushnil (L);
-    }
-    if (ev->declared_type) {
-        lua_pushstring (L, ev->declared_type);
-    } else {
-        lua_pushnil (L);
-    }
-    return 2;
-}
-
-static int
-eris_variable_readonly (lua_State *L)
-{
-    ErisVariable *ev = to_eris_variable (L);
-    lua_pushboolean (L, ev->readonly);
+    eris_typeinfo_push_userdata (L, ev->typeinfo);
     return 1;
 }
 
@@ -829,8 +817,7 @@ static const luaL_Reg eris_variable_methods[] = {
     { "get",        eris_variable_get       },
     { "set",        eris_variable_set       },
     { "name",       eris_variable_name      },
-    { "typenames",  eris_variable_typenames },
-    { "readonly",   eris_variable_readonly  },
+    { "type",       eris_variable_type      },
     { "library",    eris_variable_library   },
     { NULL, NULL },
 };
@@ -858,6 +845,13 @@ create_meta (lua_State *L)
     lua_pushvalue (L, -1);           /* Push metatable */
     lua_setfield (L, -2, "__index"); /* metatable.__index == metatable */
     luaL_setfuncs (L, eris_variable_methods, 0);
+    lua_pop (L, 1);
+
+    /* ErisTypeInfo */
+    luaL_newmetatable (L, ERIS_TYPEINFO);
+    lua_pushvalue (L, -1);           /* Push metatable */
+    lua_setfield (L, -2, "__index"); /* metatable.__index == metatable */
+    luaL_setfuncs (L, eris_typeinfo_methods, 0);
     lua_pop (L, 1);
 }
 
@@ -965,7 +959,6 @@ luaopen_eris (lua_State *L)
 
 static Dwarf_Die
 lookup_die (ErisLibrary *el,
-            const void  *address,
             const char  *name)
 {
     /*
@@ -1012,78 +1005,5 @@ lookup_die (ErisLibrary *el,
         }
     }
 
-    return NULL;
-}
-
-
-/*
- * TODO: Depending on the size of lua_Integer and lua_Number, it may not be
- *       possible to always represent 64-bit numbers. In that case, the 64-bit
- *       types should be left out at compile-time, or wrapped into userdata.
- */
-
-#define MAKE_INTEGER_GETTER_AND_SETTER(suffix, ctype)        \
-    static int eris_variable_get__ ## ctype (lua_State *L) { \
-        ErisVariable *ev = to_eris_variable (L);             \
-        lua_pushinteger (L, *((ctype *) ev->address));       \
-        return 1;                                            \
-    }                                                        \
-    static int eris_variable_set__ ## ctype (lua_State *L) { \
-        ErisVariable *ev = to_eris_variable (L);             \
-        *((ctype *) ev->address) =                           \
-            (ctype) luaL_checkinteger (L, 2);                \
-        return 0;                                            \
-    }
-
-#define MAKE_FLOAT_GETTER_AND_SETTER(suffix, ctype)          \
-    static int eris_variable_get__ ## ctype (lua_State *L) { \
-        ErisVariable *ev = to_eris_variable (L);             \
-        lua_pushnumber (L, *((ctype *) ev->address));        \
-        return 1;                                            \
-    }                                                        \
-    static int eris_variable_set__ ## ctype (lua_State *L) { \
-        ErisVariable *ev = to_eris_variable (L);             \
-        *((ctype *) ev->address) =                           \
-            (ctype) luaL_checknumber (L, 2);                 \
-        return 0;                                            \
-    }
-
-INTEGER_TYPES (MAKE_INTEGER_GETTER_AND_SETTER)
-FLOAT_TYPES (MAKE_FLOAT_GETTER_AND_SETTER)
-
-#undef MAKE_INTEGER_GETTER_AND_SETTER
-#undef MAKE_FLOAT_GETTER_AND_SETTER
-
-
-static const ErisConverter builtin_converters[] = {
-#define INTEGER_GETTER_SETTER_ITEM(suffix, ctype) { \
-    .getter         = eris_variable_get__ ## ctype, \
-    .setter         = eris_variable_set__ ## ctype, \
-    .typeinfo.name  = #ctype,                       \
-    .typeinfo.type  = ERIS_TYPE_ ## suffix,         \
-    .typeinfo.size  = sizeof (ctype) },
-
-#define FLOAT_GETTER_SETTER_ITEM(suffix, ctype) {   \
-    .getter         = eris_variable_get__ ## ctype, \
-    .setter         = eris_variable_set__ ## ctype, \
-    .typeinfo.name  = #ctype,                       \
-    .typeinfo.type  = ERIS_TYPE_ ## suffix,         \
-    .typeinfo.size  = sizeof (ctype) },
-
-    INTEGER_TYPES (INTEGER_GETTER_SETTER_ITEM)
-    FLOAT_TYPES (FLOAT_GETTER_SETTER_ITEM)
-
-#undef INTEGER_GETTER_SETTER_ITEM
-#undef FLOAT_GETTER_SETTER_ITEM
-};
-
-
-const ErisConverter*
-eris_converter_for_typeinfo (const ErisTypeInfo *typeinfo)
-{
-    for (size_t i = 0; LENGTH_OF (builtin_converters); i++) {
-        if (eris_typeinfo_equal (typeinfo, &builtin_converters[i].typeinfo))
-            return &builtin_converters[i];
-    }
     return NULL;
 }
