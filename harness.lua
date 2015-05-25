@@ -16,6 +16,7 @@ Options:
 
   --output=FORMAT   Output format (default: auto).
   --verbose         Print additional messages.
+  --commands        Print commands used to run the test cases.
   --help            Display this help message.
 
 Output formats:
@@ -27,24 +28,30 @@ Output formats:
 ]]
 
 
-if #arg < 2 then
-	io.stderr:write(usage)
+local function die(fmt, ...)
+	io.stderr:write(fmt:format(...))
 	os.exit(1)
+end
+
+
+if #arg < 2 then
+	die(usage)
 end
 
 
 local tests = {}
 local options = {
-	output  = "auto",
-	verbose = false,
+	output   = "auto",
+	commands = false,
+	verbose  = false,
 }
 
 
-function printf(fmt, ...)
+local function printf(fmt, ...)
 	io.stdout:write(fmt:format(...))
 end
 
-function verbose(fmt, ...)
+local function verbose(fmt, ...)
 	if options.verbose then
 		io.stdout:write(fmt:format(...))
 	end
@@ -345,10 +352,14 @@ local Test = object:clone {
 	skip   = false,  -- Set to "true" for skipped tests
 	signal = false,  -- Set to "true"
 
+	command = function (self)
+		return "./eris '" .. self.file .. "'"
+	end,
+
 	run = function (self)
 		assert(not self.skip, "Test should have been skipped")
 
-		local fd = io.popen("./eris '" .. self.file .. "' 2>&1")
+		local fd = io.popen(self:command() .. " 2>&1")
 		self.output = fd:read("*a")
 		local success, reason, exitcode = fd:close()
 
@@ -388,14 +399,30 @@ else
 end
 
 
-output:setup(tests)
-for i, test in ipairs(tests) do
-	output:start(test)
-	-- When test names are given in the command line (i.e. not
-	-- scanned from the tests directory), tests are always run.
-	if not test.skip or not scan_tests then
-		test:run()
+if options.commands then
+	local lua_init = os.getenv("LUA_INIT")
+	local cwd = tu.getcwd()
+	if lua_init then
+		lua_init = "LUA_INIT='" .. lua_init .. "' "
+	else
+		lua_init = ""
 	end
-	output:finish(test)
+	lua_init = "cd '" .. cwd .. "' && " .. lua_init
+	for _, test in ipairs(tests) do
+		if not test.skip or not scan_tests then
+			print(lua_init .. test:command())
+		end
+	end
+else
+	output:setup(tests)
+	for _, test in ipairs(tests) do
+		output:start(test)
+		-- When test names are given in the command line (i.e. not
+		-- scanned from the tests directory), tests are always run.
+		if not test.skip or not scan_tests then
+			test:run()
+		end
+		output:finish(test)
+	end
+	output:report()
 end
-output:report()
