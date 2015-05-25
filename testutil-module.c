@@ -103,12 +103,24 @@ testutil_isdir (lua_State *L)
 }
 
 
+static int
+testutil_getcwd (lua_State *L)
+{
+    char path[PATH_MAX];
+    if (getcwd (path, PATH_MAX) == NULL)
+        return luaL_error (L, "getcwd(): %s", strerror (errno));
+    lua_pushstring (L, path);
+    return 1;
+}
+
+
 static const luaL_Reg testutillib[] = {
     { "isatty",   testutil_isatty   },
     { "listdir",  testutil_listdir  },
     { "realpath", testutil_realpath },
     { "isfile",   testutil_isfile   },
     { "isdir",    testutil_isdir    },
+    { "getcwd",   testutil_getcwd   },
     { NULL, NULL }
 };
 
