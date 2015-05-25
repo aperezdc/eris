@@ -16,10 +16,11 @@ Options:
 
   --output=FORMAT   Output format (default: auto).
   --verbose         Print additional messages.
+  --list            List names of all test cases.
   --commands        Print commands used to run the test cases.
-  --help            Display this help message.
   --debug           Run test case under a debugger.
   --debugger=CMD    Use CMD as debugger command (default: gdb --args).
+  --help            Display this help message.
 
 Output formats:
 
@@ -48,6 +49,7 @@ local options = {
 	commands = false,
 	verbose  = false,
 	debug    = false,
+	list     = false,
 }
 
 
@@ -376,7 +378,7 @@ local Test = object:clone {
 }
 
 
-local scan_tests = #tests == 0
+local scan_tests = options.list or #tests == 0
 if scan_tests then
 	-- No test names given in the command line: scan the tests directory.
 	for i, filename in ipairs(tu.listdir(arg[1] .. "/test")) do
@@ -403,7 +405,11 @@ else
 end
 
 
-if options.debug then
+if options.list then
+	for _, test in ipairs(tests) do
+		print(test.name)
+	end
+elseif options.debug then
 	if #tests > 1 then
 		die("Running a debugger supports only a single test case.\n");
 	end
