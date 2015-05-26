@@ -152,11 +152,14 @@ l_eris_typeinfo_eq (lua_State *L)
     return 1;
 }
 
+static int l_eris_typeinfo_call (lua_State *L);
+
 static const luaL_Reg eris_typeinfo_methods[] = {
     { "__tostring", l_eris_typeinfo_tostring  },
     { "__index",    l_eris_typeinfo_index     },
     { "__len",      l_eris_typeinfo_len       },
     { "__eq",       l_eris_typeinfo_eq        },
+    { "__call",     l_eris_typeinfo_call      },
     { NULL, NULL },
 };
 
@@ -288,8 +291,12 @@ eris_symbol_init (ErisSymbol  *symbol,
                   void        *address,
                   const char  *name)
 {
-    symbol->library = eris_library_ref (library);
-    symbol->name = strdup (name);
+    CHECK_NOT_NULL (address);
+    memset (symbol, 0x00, sizeof (ErisSymbol));
+    if (library)
+        symbol->library = eris_library_ref (library);
+    if (name)
+        symbol->name = strdup (name);
     symbol->address = address;
 }
 
@@ -297,9 +304,29 @@ eris_symbol_init (ErisSymbol  *symbol,
 static inline void
 eris_symbol_free (ErisSymbol *symbol)
 {
-    eris_library_unref (symbol->library);
+    if (symbol->library)
+        eris_library_unref (symbol->library);
     free (symbol->name);
-    memset (symbol, 0x00, sizeof (ErisSymbol));
+    memset (symbol, 0xCA, sizeof (ErisSymbol));
+}
+
+
+static int
+l_eris_typeinfo_call (lua_State *L)
+{
+    const ErisTypeInfo *typeinfo = to_eris_typeinfo (L, 1);
+    lua_Integer nitems = luaL_optinteger (L, 2, 1);
+
+    if (nitems < 1)
+        return luaL_error (L, "argument #2 must be > 0");
+
+    size_t payload = eris_typeinfo_sizeof (typeinfo) * nitems;
+    ErisVariable *ev = lua_newuserdata (L, sizeof (ErisVariable) + payload);
+    eris_symbol_init ((ErisSymbol*) ev, NULL, &ev[1], NULL);
+    ev->typeinfo = typeinfo;
+    luaL_setmetatable (L, ERIS_VARIABLE);
+    TRACE ("new ErisVariable* at %p (<Lua>)\n", ev);
+    return 1;
 }
 
 
@@ -716,7 +743,20 @@ static int
 eris_variable_gc (lua_State *L)
 {
     ErisVariable *ev = to_eris_variable (L);
-    TRACE ("%p (%p:%s)\n", ev, ev->library, ev->name);
+
+#if ERIS_TRACE
+    if (ev->library && ev->name) {
+        TRACE ("eris.variable<%s>(%p:%s)\n",
+               eris_typeinfo_name (ev->typeinfo),
+               ev->library,
+               ev->name);
+    } else {
+        TRACE ("eris.variable<%s>(%p)\n",
+               eris_typeinfo_name (ev->typeinfo),
+               ev->address);
+    }
+#endif /* ERIS_TRACE */
+
     eris_symbol_free ((ErisSymbol*) ev);
     return 0;
 }
@@ -725,7 +765,17 @@ static int
 eris_variable_tostring (lua_State *L)
 {
     ErisVariable *ev = to_eris_variable (L);
-    lua_pushfstring (L, "eris.variable (%p:%s)", ev->library, ev->name);
+    if (ev->library && ev->name) {
+        lua_pushfstring (L,
+                         "eris.variable<%s>(%p:%s)",
+                         eris_typeinfo_name (ev->typeinfo),
+                         ev->library, ev->name);
+    } else {
+        lua_pushfstring (L,
+                         "eris.variable<%s>(%p)",
+                         eris_typeinfo_name (ev->typeinfo),
+                         ev->address);
+    }
     return 1;
 }
 
