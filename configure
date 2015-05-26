@@ -249,6 +249,24 @@ then
 	die 'Could not find libdwarf'
 fi
 
+if ! try_link 'dwarf_pubtype_die_offset()' -ldwarf -lelf <<-EOF
+	#include <libdwarf/libdwarf.h>
+	int main () { return dwarf_pubtype_die_offset (0, 0, 0); }
+	EOF
+then
+	if try_link 'dwarf_pubtype_type_die_offset()' -ldwarf -lelf <<-EOF
+	#define dwarf_pubtype_die_offset dwarf_pubtype_type_die_offset
+	#include <libdwarf/libdwarf.h>
+	int main () { return dwarf_pubtype_die_offset (0, 0, 0); }
+	EOF
+	then
+		# Nasty, nasty libdwarf
+		CPPFLAGS="${CPPFLAGS} -DERIS_WORKAROUND_DWARF_PUBTYPE_DIE_OFFSET=1"
+	else
+		die 'Could not find libdwarf'
+	fi
+fi
+
 if try_link 'dlopen()' -ldl <<-EOF
 	#include <dlfcn.h>
 	int main () { return dlopen ((void*) 0, 0) != (void*) 0; }
