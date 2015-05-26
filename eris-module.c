@@ -341,6 +341,7 @@ l_eris_typeinfo_call (lua_State *L)
     eris_symbol_init ((ErisSymbol*) ev, NULL, &ev[1], NULL);
     ev->typeinfo = typeinfo;
     ev->n_items = n_items;
+    memset (ev->address, 0x00, payload);
     luaL_setmetatable (L, ERIS_VARIABLE);
     TRACE ("new ErisVariable* at %p (<Lua>)\n", ev);
     return 1;
