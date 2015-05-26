@@ -164,7 +164,9 @@ static const luaL_Reg eris_typeinfo_methods[] = {
 };
 
 
-static Dwarf_Die lookup_die (ErisLibrary *el, const char *name);
+static Dwarf_Die lookup_die (ErisLibrary *library,
+                             const char  *name,
+                             Dwarf_Error *d_error);
 
 
 /*
@@ -253,6 +255,8 @@ void eris_library_free (ErisLibrary *el)
 
     if (el->d_globals)
         dwarf_globals_dealloc (el->d_debug, el->d_globals, el->d_num_globals);
+    if (el->d_types)
+        dwarf_pubtypes_dealloc (el->d_debug, el->d_types, el->d_num_types);
 
     Dwarf_Error d_error;
     dwarf_finish (el->d_debug, &d_error);
@@ -590,10 +594,12 @@ eris_library_index (lua_State *L)
         goto return_error;
     }
 
-    Dwarf_Die d_die = lookup_die (e, name);
+    Dwarf_Error d_error = 0;
+    Dwarf_Die d_die = lookup_die (e, name, &d_error);
     if (!d_die) {
         return luaL_error (L, "could not look up DWARF debug information "
-                           "for symbol '%s' (library %p)", name, e);
+                           "for symbol '%s' (library %p; %s)",
+                           name, e, dw_errmsg (d_error));
     }
 
 #if ERIS_RUNTIME_CHECKS
@@ -607,7 +613,6 @@ eris_library_index (lua_State *L)
      * symbols. So, this is built as an optional a sanity check.
      */
     bool symbol_is_private = true;
-    Dwarf_Error d_error = 0;
     Dwarf_Attribute d_attr = 0;
     if (dwarf_attr (d_die,
                     DW_AT_external,
@@ -968,21 +973,23 @@ eris_load (lua_State *L)
                            &d_globals,
                            &d_num_globals,
                            &d_error) != DW_DLV_OK) {
-        dwarf_finish (d_debug, &d_error);
+        Dwarf_Error d_finish_error = 0;
+        dwarf_finish (d_debug, &d_finish_error);
         close (fd);
         dlclose (dl);
-        /* TODO: Provide a better error message. */
-        return luaL_error (L, "cannot read globals");
+        return luaL_error (L, "cannot read globals (%s)", dw_errmsg (d_error));
     }
     TRACE ("found %ld globals\n", (long) d_num_globals);
 
 #if ERIS_TRACE
     for (Dwarf_Signed i = 0; i < d_num_globals; i++) {
         char *name = NULL;
-        if (dwarf_globname (d_globals[i], &name, &d_error) == DW_DLV_OK) {
-            TRACE ("-- %s\n", name);
+        Dwarf_Error d_name_error = 0;
+        if (dwarf_globname (d_globals[i], &name, &d_name_error) == DW_DLV_OK) {
+            TRACE ("-- [%li] %s\n", (long) i, name);
             dwarf_dealloc (d_debug, name, DW_DLA_STRING);
-            name = NULL;
+        } else {
+            TRACE ("-- [%li] ERROR: %s\n", (long) i, dw_errmsg (d_name_error));
         }
     }
 #endif /* ERIS_TRACE */
@@ -1022,7 +1029,8 @@ luaopen_eris (lua_State *L)
 
 static Dwarf_Die
 lookup_die (ErisLibrary *el,
-            const char  *name)
+            const char  *name,
+            Dwarf_Error *d_error)
 {
     /*
      * TODO: This performs a linear search. Try to find an alternative way,
@@ -1031,11 +1039,12 @@ lookup_die (ErisLibrary *el,
      */
     for (Dwarf_Signed i = 0; i < el->d_num_globals; i++) {
         char *global_name;
-        Dwarf_Error d_error;
+        Dwarf_Error d_globname_error = 0;
         if (dwarf_globname (el->d_globals[i],
                             &global_name,
-                            &d_error) != DW_DLV_OK) {
-            TRACE ("skipped malformed global at index %i\n", (int) i);
+                            &d_globname_error) != DW_DLV_OK) {
+            TRACE ("skipped malformed global at index %i (%s)\n",
+                   (int) i, dw_errmsg (d_globname_error));
             continue;
         }
 
@@ -1044,14 +1053,12 @@ lookup_die (ErisLibrary *el,
         global_name = NULL;
 
         if (found) {
-            Dwarf_Error d_error;
             Dwarf_Off d_offset;
-
             if (dwarf_global_die_offset (el->d_globals[i],
                                          &d_offset,
-                                         &d_error) != DW_DLV_OK) {
-                /* TODO: Print Dwarf_Error to trace log. */
-                TRACE ("could not obtain DIE offset\n");
+                                         d_error) != DW_DLV_OK) {
+                TRACE ("could not obtain DIE offset (%s)\n",
+                       dw_errmsg (*d_error));
                 return NULL;
             }
 
