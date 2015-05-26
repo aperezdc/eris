@@ -1,0 +1,22 @@
+language: c
+compiler:
+    - clang
+    - gcc
+env:
+    global:
+        - LUA_VER=5.3.0
+    matrix:
+        - COVERAGE=true
+        - COVERAGE=false
+install:
+    - sudo apt-get install libdwarf-dev libelf-dev ninja-build
+    - $COVERAGE && sudo pip install cpp-coveralls || true
+script:
+    - wget -O - http://www.lua.org/ftp/lua-$LUA_VER.tar.gz | tar -xzf -
+    - ln -s lua-$LUA_VER lua
+    - $COVERAGE && export CC="${CC} -fprofile-arcs -ftest-coverage -O0 -g" || true
+    - ./configure --enable-checks
+    - ninja
+    - ./run-tests --verbose
+after_success:
+    - $COVERAGE && coveralls --exclude lua --exclude lua-$LUA_VER --gcov-options '\-lp' || true
