@@ -959,8 +959,6 @@ create_meta (lua_State *L)
 
     /* ErisTypeInfo */
     luaL_newmetatable (L, ERIS_TYPEINFO);
-    lua_pushvalue (L, -1);           /* Push metatable */
-    lua_setfield (L, -2, "__index"); /* metatable.__index == metatable */
     luaL_setfuncs (L, eris_typeinfo_methods, 0);
     lua_pop (L, 1);
 }
