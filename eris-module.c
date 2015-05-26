@@ -195,6 +195,7 @@ typedef struct {
 typedef struct {
     ERIS_COMMON_FIELDS;
     const ErisTypeInfo  *typeinfo;
+    size_t               n_items;
 } ErisVariable;
 
 
@@ -315,15 +316,16 @@ static int
 l_eris_typeinfo_call (lua_State *L)
 {
     const ErisTypeInfo *typeinfo = to_eris_typeinfo (L, 1);
-    lua_Integer nitems = luaL_optinteger (L, 2, 1);
+    lua_Integer n_items = luaL_optinteger (L, 2, 1);
 
-    if (nitems < 1)
+    if (n_items < 1)
         return luaL_error (L, "argument #2 must be > 0");
 
-    size_t payload = eris_typeinfo_sizeof (typeinfo) * nitems;
+    size_t payload = eris_typeinfo_sizeof (typeinfo) * n_items;
     ErisVariable *ev = lua_newuserdata (L, sizeof (ErisVariable) + payload);
     eris_symbol_init ((ErisSymbol*) ev, NULL, &ev[1], NULL);
     ev->typeinfo = typeinfo;
+    ev->n_items = n_items;
     luaL_setmetatable (L, ERIS_VARIABLE);
     TRACE ("new ErisVariable* at %p (<Lua>)\n", ev);
     return 1;
@@ -566,7 +568,8 @@ make_variable_wrapper (lua_State   *L,
 
     ErisVariable *ev = lua_newuserdata (L, sizeof (ErisVariable));
     eris_symbol_init ((ErisSymbol*) ev, library, address, name);
-    ev->typeinfo  = typeinfo;
+    ev->typeinfo = typeinfo;
+    ev->n_items  = 1; /* TODO: Set for arrays. */
     luaL_setmetatable (L, ERIS_VARIABLE);
     TRACE ("new ErisVariable* at %p (%p:%s)\n", ev, library, name);
     return 1;
@@ -780,6 +783,14 @@ eris_variable_tostring (lua_State *L)
 }
 
 static int
+eris_variable_len (lua_State *L)
+{
+    ErisVariable *ev = to_eris_variable (L);
+    lua_pushinteger (L, ev->n_items);
+    return 1;
+}
+
+static int
 eris_variable_set (lua_State *L)
 {
     ErisVariable *ev = to_eris_variable (L);
@@ -864,6 +875,7 @@ eris_variable_library (lua_State *L)
 static const luaL_Reg eris_variable_methods[] = {
     { "__gc",       eris_variable_gc        },
     { "__tostring", eris_variable_tostring  },
+    { "__len",      eris_variable_len       },
     { "get",        eris_variable_get       },
     { "set",        eris_variable_set       },
     { "name",       eris_variable_name      },
