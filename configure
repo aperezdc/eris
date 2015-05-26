@@ -67,7 +67,7 @@ try_link ()
 {
 	echo -n "Checking for $1 in $2 ... "
 	shift
-	local tempfile="/tmp/compile-test-$$.c"
+	local tempfile="${objdir}/compile-test-$$.c"
 	local result=1
 	cat > "${tempfile}"
 	if "${CC}" ${CPPFLAGS} ${CFLAGS} -o "${tempfile}.out" "${tempfile}" \
@@ -87,7 +87,7 @@ try_link ()
 try_header ()
 {
 	echo -n "Checking for $1 ... "
-	local tempfile="/tmp/preprocess-test-$$.c"
+	local tempfile="${objdir}/preprocess-test-$$.c"
 	local result=1
 	cat > "${tempfile}" <<-EOF
 	#include $1
