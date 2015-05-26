@@ -913,7 +913,8 @@ eris_load (lua_State *L)
         return luaL_error (L, "cannot read globals");
     }
     TRACE ("found %ld globals\n", (long) d_num_globals);
-#if defined(ERIS_TRACE) && ERIS_TRACE > 0
+
+#if ERIS_TRACE
     for (Dwarf_Signed i = 0; i < d_num_globals; i++) {
         char *name = NULL;
         if (dwarf_globname (d_globals[i], &name, &d_error) == DW_DLV_OK) {
@@ -922,7 +923,7 @@ eris_load (lua_State *L)
             name = NULL;
         }
     }
-#endif /* ERIS_TRACE > 0 */
+#endif /* ERIS_TRACE */
 
     ErisLibrary *el = calloc (1, sizeof (ErisLibrary));
     el->fd = fd;

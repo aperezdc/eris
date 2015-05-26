@@ -11,6 +11,9 @@
 #include <stdbool.h>
 
 #if defined(ERIS_TRACE) && ERIS_TRACE > 0
+# undef ERIS_TRACE
+# define ERIS_TRACE 1
+
 # define TRACE(...)                                                 \
     do {                                                            \
         if (eris_trace_enabled)                                     \
@@ -46,6 +49,8 @@ extern void eris_trace_setup (void);
 extern bool eris_trace_enabled;
 
 #else
+# undef ERIS_TRACE
+# define ERIS_TRACE 0
 # define eris_trace_setup( )  ((void)0)
 # define TRACE(...)           ((void)0)
 #endif /* ERIS_TRACE */
