@@ -816,13 +816,32 @@ eris_variable_set (lua_State *L)
                            ev->library, ev->name);
     }
 
+    lua_Integer index = 1;
+    if (lua_gettop (L) == 3) {
+        index = luaL_checkinteger (L, 2);
+        if (index == 0) {
+            return luaL_error (L, "0 is not a valid index");
+        }
+        /* Adjust index, do bounds checking. */
+        if (index < 0) index += ev->n_items;
+        if (index <= 0 || index > ev->n_items) {
+            return luaL_error (L, "index %i out of bounds (effective=%i, length=%i)",
+                               luaL_checkinteger (L, 2), index, ev->n_items);
+        }
+    } else if (lua_gettop (L) != 2) {
+        return luaL_error (L, "wrong number of function arguments");
+    }
+
+    /* Convert from 1-based to 0-based indexing. */
+    index--;
+
 #define SET_INTEGER(suffix, ctype) \
         case ERIS_TYPE_ ## suffix: \
-            *((ctype*) ev->address) = (ctype) luaL_checkinteger (L, 2); \
+            ((ctype*) ev->address)[index] = (ctype) luaL_checkinteger (L, -1); \
             break;
 #define SET_FLOAT(suffix, ctype) \
         case ERIS_TYPE_ ## suffix: \
-            *((ctype*) ev->address) = (ctype) luaL_checknumber (L, 2); \
+            ((ctype*) ev->address)[index] = (ctype) luaL_checknumber (L, -1); \
             break;
 
     switch (eris_typeinfo_type (ev->typeinfo)) {
@@ -835,21 +854,33 @@ eris_variable_set (lua_State *L)
 
 #undef SET_INTEGER
 #undef SET_FLOAT
-    return 0;
+
+    lua_settop (L, 1);
+    return 1;
 }
 
 static int
 eris_variable_get (lua_State *L)
 {
     ErisVariable *ev = to_eris_variable (L);
+    lua_Integer index = luaL_optinteger (L, 2, 1);
+
+    /* Adjust index, do bounds checking. */
+    if (index < 0) index += ev->n_items;
+    if (index <= 0 || index > ev->n_items) {
+        return luaL_error (L, "index %i out of bounds (effective=%i, length=%i)",
+                           luaL_checkinteger (L, 2), index, ev->n_items);
+    }
+    /* Convert from 1-based to 0-based indexing. */
+    index--;
 
 #define GET_INTEGER(suffix, ctype) \
         case ERIS_TYPE_ ## suffix: \
-            lua_pushinteger (L, *((ctype*) ev->address)); \
+            lua_pushinteger (L, ((ctype*) ev->address)[index]); \
             break;
 #define GET_FLOAT(suffix, ctype) \
         case ERIS_TYPE_ ## suffix: \
-            lua_pushnumber (L, *((ctype*) ev->address)); \
+            lua_pushnumber (L, ((ctype*) ev->address)[index]); \
             break;
 
     switch (eris_typeinfo_type (ev->typeinfo)) {
