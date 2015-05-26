@@ -18,8 +18,14 @@
 #include "eris-trace.h"
 #include "eris-util.h"
 
-#include <libdwarf/libdwarf.h>
-#include <libdwarf/dwarf.h>
+#if defined(ERIS_LIBDWARF_LIBDWARF_H) && ERIS_LIBDWARF_LIBDWARF_H
+# include <libdwarf/libdwarf.h>
+# include <libdwarf/dwarf.h>
+#else
+# include <libdwarf.h>
+# include <dwarf.h>
+#endif /* ERIS_LIBDWARF_LIBDWARF_H */
+
 #include <libelf.h>
 #include <dlfcn.h>
 #include <sys/types.h>

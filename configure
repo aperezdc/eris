@@ -70,7 +70,7 @@ try_link ()
 	local tempfile="/tmp/compile-test-$$.c"
 	local result=1
 	cat > "${tempfile}"
-	if "${CC}" ${CFLAGS} -o "${tempfile}.out" "${tempfile}" \
+	if "${CC}" ${CPPFLAGS} ${CFLAGS} -o "${tempfile}.out" "${tempfile}" \
 		${LDFLAGS} ${LIBS} "$@" &> /dev/null
 	then
 		echo yes
@@ -241,8 +241,19 @@ then
 	die 'Could not find libelf'
 fi
 
+if try_header '<libdwarf/libdwarf.h>' ; then
+	CPPFLAGS="${CPPFLAGS} -DERIS_LIBDWARF_LIBDWARF_H=1"
+else
+	mandatory_header '<libdwarf.h>'
+fi
+
+
 if ! try_link 'dwarf_init()' -ldwarf -lelf <<-EOF
-	#include <libdwarf/libdwarf.h>
+	#ifdef ERIS_LIBDWARF_LIBDWARF_H
+	# include <libdwarf/libdwarf.h>
+	#else
+	# include <libdwarf.h>
+	#endif
 	int main () { return dwarf_init (0, 0, 0, 0, 0, 0); }
 	EOF
 then
@@ -250,13 +261,21 @@ then
 fi
 
 if ! try_link 'dwarf_pubtype_die_offset()' -ldwarf -lelf <<-EOF
-	#include <libdwarf/libdwarf.h>
+	#ifdef ERIS_LIBDWARF_LIBDWARF_H
+	# include <libdwarf/libdwarf.h>
+	#else
+	# include <libdwarf.h>
+	#endif
 	int main () { return dwarf_pubtype_die_offset (0, 0, 0); }
 	EOF
 then
 	if try_link 'dwarf_pubtype_type_die_offset()' -ldwarf -lelf <<-EOF
 	#define dwarf_pubtype_die_offset dwarf_pubtype_type_die_offset
-	#include <libdwarf/libdwarf.h>
+	#ifdef ERIS_LIBDWARF_LIBDWARF_H
+	# include <libdwarf/libdwarf.h>
+	#else
+	# include <libdwarf.h>
+	#endif
 	int main () { return dwarf_pubtype_die_offset (0, 0, 0); }
 	EOF
 	then
