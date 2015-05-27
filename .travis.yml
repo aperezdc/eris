@@ -7,6 +7,9 @@ env:
         - COVERAGE=true
         - COVERAGE=false
 install:
+    - sudo update-alternatives --install /usr/bin/ld ld /usr/bin/ld.gold 10
+    - sudo update-alternatives --install /usr/bin/ld ld /usr/bin/ld.bfd  20
+    - sudo update-alternatives --set ld /usr/bin/ld.gold
     - sudo apt-get install -y libelf-dev
     - $COVERAGE && sudo pip install cpp-coveralls || true
 script:
