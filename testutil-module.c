@@ -5,8 +5,13 @@
  * Distributed under terms of the MIT license.
  */
 
-#include "lua/src/lua.h"
-#include "lua/src/lauxlib.h"
+#ifdef ERIS_LUA_BUNDLED
+# include "lua.h"
+# include "lauxlib.h"
+#else
+# include <lua.h>
+# include <lauxlib.h>
+#endif /* ERIS_LUA_BUNDLED */
 
 #include <sys/types.h>
 #include <sys/stat.h>

@@ -97,6 +97,12 @@ for i = 3, #arg do
 end
 
 
+local LUA_EXE = os.getenv("ERIS_LUA_EXE")
+if LUA_EXE == nil then
+	die("Environment variable LUA_EXE is undefined")
+end
+
+
 local object = {
 	clone = function (self, t)
 		local clone = {}
@@ -359,7 +365,7 @@ local Test = object:clone {
 	signal = false,  -- Set to "true"
 
 	command = function (self)
-		return "./eris '" .. self.file .. "'"
+		return "'" .. LUA_EXE .. "' '" .. self.file .. "'"
 	end,
 
 	run = function (self)

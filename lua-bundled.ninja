@@ -1,0 +1,121 @@
+lua_version = 5.3.0
+lua_tarball = ${obj}/downloads/lua-${lua_version}.tar.gz
+lua_path    = ${obj}/lua-${lua_version}
+lua_lib     = ${obj}/liblua.a
+lua_exe     = ${obj}/lua
+cppflags    = ${cppflags} -I${lua_path}/src $
+              -DERIS_LUA_BUNDLED=1 -DLUA_USE_DLOPEN=1
+
+
+build ${lua_lib} : staticlib $
+      ${obj}/lua.lapi.o      $
+      ${obj}/lua.lauxlib.o   $
+      ${obj}/lua.lbaselib.o  $
+      ${obj}/lua.lbitlib.o   $
+      ${obj}/lua.lcode.o     $
+      ${obj}/lua.lcorolib.o  $
+      ${obj}/lua.lctype.o    $
+      ${obj}/lua.ldblib.o    $
+      ${obj}/lua.ldebug.o    $
+      ${obj}/lua.ldo.o       $
+      ${obj}/lua.ldump.o     $
+      ${obj}/lua.lfunc.o     $
+      ${obj}/lua.lgc.o       $
+      ${obj}/lua.linit.o     $
+      ${obj}/lua.liolib.o    $
+      ${obj}/lua.llex.o      $
+      ${obj}/lua.lmathlib.o  $
+      ${obj}/lua.lmem.o      $
+      ${obj}/lua.loadlib.o   $
+      ${obj}/lua.lobject.o   $
+      ${obj}/lua.lopcodes.o  $
+      ${obj}/lua.loslib.o    $
+      ${obj}/lua.lparser.o   $
+      ${obj}/lua.lstate.o    $
+      ${obj}/lua.lstring.o   $
+      ${obj}/lua.lstrlib.o   $
+      ${obj}/lua.ltable.o    $
+      ${obj}/lua.ltablib.o   $
+      ${obj}/lua.ltm.o       $
+      ${obj}/lua.lundump.o   $
+      ${obj}/lua.lutf8lib.o  $
+      ${obj}/lua.lvm.o       $
+      ${obj}/lua.lzio.o
+
+build ${lua_exe} : ld ${obj}/lua.lua.o ${lua_lib}
+  libs = ${libs} -lm
+
+build ${obj}/lua.lapi.o     : cc ${lua_path}/src/lapi.c
+build ${obj}/lua.lauxlib.o  : cc ${lua_path}/src/lauxlib.c
+build ${obj}/lua.lbaselib.o : cc ${lua_path}/src/lbaselib.c
+build ${obj}/lua.lbitlib.o  : cc ${lua_path}/src/lbitlib.c
+build ${obj}/lua.lcode.o    : cc ${lua_path}/src/lcode.c
+build ${obj}/lua.lcorolib.o : cc ${lua_path}/src/lcorolib.c
+build ${obj}/lua.lctype.o   : cc ${lua_path}/src/lctype.c
+build ${obj}/lua.ldblib.o   : cc ${lua_path}/src/ldblib.c
+build ${obj}/lua.ldebug.o   : cc ${lua_path}/src/ldebug.c
+build ${obj}/lua.ldo.o      : cc ${lua_path}/src/ldo.c
+build ${obj}/lua.ldump.o    : cc ${lua_path}/src/ldump.c
+build ${obj}/lua.lfunc.o    : cc ${lua_path}/src/lfunc.c
+build ${obj}/lua.lgc.o      : cc ${lua_path}/src/lgc.c
+build ${obj}/lua.linit.o    : cc ${lua_path}/src/linit.c
+build ${obj}/lua.liolib.o   : cc ${lua_path}/src/liolib.c
+build ${obj}/lua.llex.o     : cc ${lua_path}/src/llex.c
+build ${obj}/lua.lmathlib.o : cc ${lua_path}/src/lmathlib.c
+build ${obj}/lua.lmem.o     : cc ${lua_path}/src/lmem.c
+build ${obj}/lua.loadlib.o  : cc ${lua_path}/src/loadlib.c
+build ${obj}/lua.lobject.o  : cc ${lua_path}/src/lobject.c
+build ${obj}/lua.lopcodes.o : cc ${lua_path}/src/lopcodes.c
+build ${obj}/lua.loslib.o   : cc ${lua_path}/src/loslib.c
+build ${obj}/lua.lparser.o  : cc ${lua_path}/src/lparser.c
+build ${obj}/lua.lstate.o   : cc ${lua_path}/src/lstate.c
+build ${obj}/lua.lstring.o  : cc ${lua_path}/src/lstring.c
+build ${obj}/lua.lstrlib.o  : cc ${lua_path}/src/lstrlib.c
+build ${obj}/lua.ltable.o   : cc ${lua_path}/src/ltable.c
+build ${obj}/lua.ltablib.o  : cc ${lua_path}/src/ltablib.c
+build ${obj}/lua.ltm.o      : cc ${lua_path}/src/ltm.c
+build ${obj}/lua.lundump.o  : cc ${lua_path}/src/lundump.c
+build ${obj}/lua.lutf8lib.o : cc ${lua_path}/src/lutf8lib.c
+build ${obj}/lua.lvm.o      : cc ${lua_path}/src/lvm.c
+build ${obj}/lua.lzio.o     : cc ${lua_path}/src/lzio.c
+build ${obj}/lua.lua.o      : cc ${lua_path}/src/lua.c
+build ${obj}/lua.luac.o     : cc ${lua_path}/src/luac.c
+
+build ${lua_path}/src/lapi.c     $
+      ${lua_path}/src/lauxlib.c  $
+      ${lua_path}/src/lbaselib.c $
+      ${lua_path}/src/lbitlib.c  $
+      ${lua_path}/src/lcode.c    $
+      ${lua_path}/src/lcorolib.c $
+      ${lua_path}/src/lctype.c   $
+      ${lua_path}/src/ldblib.c   $
+      ${lua_path}/src/ldebug.c   $
+      ${lua_path}/src/ldo.c      $
+      ${lua_path}/src/ldump.c    $
+      ${lua_path}/src/lfunc.c    $
+      ${lua_path}/src/lgc.c      $
+      ${lua_path}/src/linit.c    $
+      ${lua_path}/src/liolib.c   $
+      ${lua_path}/src/llex.c     $
+      ${lua_path}/src/lmathlib.c $
+      ${lua_path}/src/lmem.c     $
+      ${lua_path}/src/loadlib.c  $
+      ${lua_path}/src/lobject.c  $
+      ${lua_path}/src/lopcodes.c $
+      ${lua_path}/src/loslib.c   $
+      ${lua_path}/src/lparser.c  $
+      ${lua_path}/src/lstate.c   $
+      ${lua_path}/src/lstring.c  $
+      ${lua_path}/src/lstrlib.c  $
+      ${lua_path}/src/ltable.c   $
+      ${lua_path}/src/ltablib.c  $
+      ${lua_path}/src/ltm.c      $
+      ${lua_path}/src/lundump.c  $
+      ${lua_path}/src/lutf8lib.c $
+      ${lua_path}/src/lvm.c      $
+      ${lua_path}/src/lzio.c     $
+      ${lua_path}/src/luac.c     $
+    : untargz ${lua_tarball}
+
+build ${lua_tarball} : urlfetch
+  url = http://www.lua.org/ftp/lua-${lua_version}.tar.gz

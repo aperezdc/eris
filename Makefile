@@ -29,20 +29,38 @@ LDLIBS   = ${libs}
 CC       = ${cc}
 LDFLAGS += -fPIC -Wl,-E
 
+
+define RUN_FETCH_URL
+$P Fetch ${URL}
+$Q mkdir -p $(dir $@)
+$Q wget -qO $@ '${URL}'
+endef
+
+define RUN_UNTARGZ
+$P UnTarGz $<
+$Q mkdir -p ${OUT}
+$Q tar -xzf $< -C ${OUT}
+endef
+
+define RUN_STATICLIB
+$P StaticLib $@
+$Q mkdir -p $(dir $@)
+$Q ar cr $@ $^
+endef
+
 # We want -Wall *before* the other CFLAGS, so we have to force its
 # expansion and then re-assign to the variable.
 EXPAND_CFLAGS := -fPIC -std=gnu99 -Wall ${CFLAGS}
 CFLAGS = ${EXPAND_CFLAGS}
 
-# Lua sources.
-LUA_SRCS := lapi.c lauxlib.c lbaselib.c lbitlib.c lcode.c lcorolib.c \
-            lctype.c ldblib.c ldebug.c ldo.c ldump.c lfunc.c lgc.c   \
-            linit.c liolib.c llex.c lmathlib.c lmem.c loadlib.c      \
-            lobject.c lopcodes.c loslib.c lparser.c lstate.c ltm.c   \
-            lstring.c lstrlib.c ltable.c ltablib.c lundump.c lvm.c   \
-            lutf8lib.c lzio.c lua.c
-LUA_SRCS := $(addprefix lua/src/,${LUA_SRCS})
-LUA_OBJS := $(patsubst %.c,${OUT}/%.o,${LUA_SRCS})
+all:
+clean:
+distclean: clean
+.PHONY: distclean
+
+include lua-${lua_build}.mk
+include libdwarf-${libdwarf_build}.mk
+
 
 # Eris (non-JIT) module sources.
 ERIS_MODULE_SRCS := eris-module.c eris-trace.c eris-util.c eris-typing.c
@@ -52,6 +70,10 @@ ERIS_MODULE_OBJS := $(patsubst %.c,${OUT}/%.o,${ERIS_MODULE_SRCS})
 TESTUTIL_MODULE_SRCS := testutil-module.c
 TESTUTIL_MODULE_OBJS := $(patsubst %.c,${OUT}/%.o,${TESTUTIL_MODULE_SRCS})
 
+${OUT}/%.o: ${OUT}/%.c
+	$P Compile $@
+	$Q mkdir -p $(dir $@)
+	$Q ${CC} ${CFLAGS} ${CPPFLAGS} -c -o $@ $<
 
 ${OUT}/%.o: %.c
 	$P Compile $@
@@ -64,24 +86,20 @@ ${OUT}/%:
 	$Q ${CC} ${CFLAGS} ${LDFLAGS} -o $@ $^ ${LDLIBS}
 
 
-all: ${OUT}/eris \
+all: ${LUA} \
 	 ${OUT}/eris.so \
 	 ${OUT}/testutil.so \
 	 ${OUT}/libtest.so
 	$(if ${MAKE_TERMOUT},$Q echo)
 
 clean:
-	$Q ${RM} ${OUT}/eris ${LUA_OBJS}
 	$Q ${RM} ${OUT}/eris.so ${ERIS_MODULE_OBJS}
 	$Q ${RM} ${OUT}/testutil.so ${TESTUTIL_MODULE_OBJS}
 	$Q ${RM} ${OUT}/libtest.so ${OUT}/libtest.o
 
-${OUT}/eris: ${LUA_OBJS}
-${OUT}/eris: LDLIBS += -lm
-
-${OUT}/eris.so: ${ERIS_MODULE_OBJS}
+${OUT}/eris.so: ${ERIS_MODULE_OBJS} ${LIBDWARF}
 ${OUT}/eris.so: LDFLAGS += -shared
-${OUT}/eris.so: LDLIBS += -ldwarf -lelf
+${OUT}/eris.so: LDLIBS += ${LIBDWARF_LDLIBS}
 
 ${OUT}/testutil.so: ${TESTUTIL_MODULE_OBJS}
 ${OUT}/testutil.so: LDFLAGS += -shared
@@ -89,9 +107,6 @@ ${OUT}/testutil.so: LDFLAGS += -shared
 ${OUT}/libtest.so: ${OUT}/libtest.o
 ${OUT}/libtest.so: LDFLAGS += -shared
 
-${OUT}/lua/src/lua.o: CPPFLAGS += -DLUA_PROGNAME='"eris"' \
-	                              -DLUA_PROMPT='"(eris) "' \
-	                              -DLUA_PROMPT2='"  ...) "'
 
 build.conf: configure
 	./configure

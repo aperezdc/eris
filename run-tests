@@ -12,23 +12,32 @@ curdir=$(pwd)
 cd "$(dirname "$0")"
 erisdir=$(pwd)
 
-if ! [ -r build.conf ] ; then
+if ! test -r build.conf
+then
 	echo "build.conf not found. Have you run ./configure?" 1>&2
 	exit 1
 fi
 
+luaexe=$(sed -e 's/^system_lua_bin[[:space:]]*=[[:space:]]*\(.*\)$/\1/p' -e 'd' build.conf)
 objdir=$(sed -e 's/^obj[[:space:]]*=[[:space:]]*\(.*\)$/\1/p' -e 'd' build.conf)
 cd "${objdir}"
 objdir=$(pwd)
 
-for file in eris libtest.so eris.so testutil.so
+if test "x${luaexe}" = "x"
+then
+	luaexe="${objdir}/lua"
+fi
+
+for file in libtest.so eris.so testutil.so "${luaexe}"
 do
-	if ! [ -r "${file}" ] ; then
-		echo "File not found: ${objdir}/${file}" 1>&2
+	if ! test -r "${file}"
+	then
+		echo "File not found: ${file}" 1>&2
 		echo "Have you run 'ninja' or 'make'?" 1>&2
 		exit 1
 	fi
 done
 
+export ERIS_LUA_EXE="${luaexe}"
 export LUA_INIT="@${erisdir}/assertions.lua"
-exec "./eris" "${erisdir}/harness.lua" "${erisdir}" "${curdir}" "$@"
+exec "${luaexe}" "${erisdir}/harness.lua" "${erisdir}" "${curdir}" "$@"

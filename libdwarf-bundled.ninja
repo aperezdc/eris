@@ -1,0 +1,41 @@
+libdwarf_version = 20150507
+libdwarf_tarball = ${obj}/downloads/libdwarf-${libdwarf_version}.tar.gz
+libdwarf_path    = ${obj}/libdwarf-${libdwarf_version}
+libdwarf_lib     = ${libdwarf_path}/libdwarf/libdwarf.a
+cppflags         = ${cppflags} -I${libdwarf_path}/libdwarf $
+                   -DERIS_LIBDWARF_BUNDLED=1
+
+
+rule libdwarf_configure
+  pool = console
+  command = cd ${libdwarf_path}/libdwarf $
+    && CC='${cc}' CFLAGS='-fPIC' ./configure --disable-shared
+  description = libdwarf/configure
+
+rule libdwarf_make
+  pool = console
+  command = make -C ${libdwarf_path}/libdwarf
+  description = libdwarf/make
+
+
+build ${libdwarf_lib} : libdwarf_make ${libdwarf_path}/libdwarf/Makefile
+build ${libdwarf_path}/libdwarf/Makefile   $
+      ${libdwarf_path}/libdwarf/libdwarf.h $
+      : libdwarf_configure || ${libdwarf_path}/libdwarf/configure
+
+build ${libdwarf_path}/libdwarf/configure $
+      ${libdwarf_path}/libdwarf/dwarf.h   $
+      : untargz ${libdwarf_tarball}
+
+build ${libdwarf_tarball} : urlfetch
+  url = https://github.com/Distrotech/libdwarf/archive/${libdwarf_version}.tar.gz
+
+
+build ${obj}/eris.so : ld  $
+      ${obj}/eris-util.o   $
+      ${obj}/eris-trace.o  $
+      ${obj}/eris-typing.o $
+      ${obj}/eris-module.o $
+      ${libdwarf_lib} | ${lua_exe}
+  ldflags = ${ldflags} -shared
+  libs = ${libs} -lelf

@@ -50,6 +50,12 @@ Available options:
   --enable-trace   Enable TRACE(), for debugging purposes.
   --enable-checks  Enable additional run-time sanity checks.
   --enable-asan    Compile with ASAN support (needs Clang).
+  --enable-bundled-libdwarf
+                   Use a bundled copy libdwarf instead of the
+                   one supplied by the operating system.
+  --enable-bundled-lua
+                   Use a bundled copy of Lua instead of the
+                   one supplied by the system.
 
 The following environment variables, if set, will be honored:
 
@@ -81,8 +87,9 @@ cf_die () {
 
 cf_choose_program () {
 	while test -n "$1" ; do
-		if which "$1" &> /dev/null ; then
-			echo "$1"
+		if which "$1" > /dev/null 2>&1
+		then
+			which "$1"
 			return
 		fi
 		shift
@@ -234,6 +241,8 @@ debug_build=false
 enable_asan=false
 enable_trace=false
 enable_checks=false
+enable_bundled_lua=false
+enable_bundled_libdwarf=false
 objdir=$(pwd)
 for var in "$@" ; do
 	case ${var} in
@@ -279,11 +288,26 @@ for var in "$@" ; do
 			enable_checks=false
 			;;
 
+		--enable-bundled-lua)
+			enable_bundled_lua=true
+			;;
+		--disable-bundled-lua)
+			enable_bundled_lua=false
+			;;
+
+		--enable-bundled-libdwarf)
+			enable_bundled_libdwarf=true
+			;;
+		--disable-bundled-libdwarf)
+			enable_bundled_libdwarf=false
+			;;
+
 		*)
 			true
 			;;
 	esac
 done
+
 
 build_type='release'
 if ${debug_build}
@@ -338,15 +362,23 @@ cf_ensure_header '<libelf.h>'
 cf_ensure_function elf_begin -lelf
 
 
-if cf_test_header '<libdwarf/libdwarf.h>'
+cf_checking 'whether to use bundled libdwarf'
+if ${enable_bundled_libdwarf}
 then
-	CPPFLAGS="${CPPFLAGS} -DERIS_LIBDWARF_LIBDWARF_H=1"
+	libdwarf_build_type='bundled'
+	cf_check_result yes
 else
-	cf_ensure_header '<libdwarf.h>'
-fi
+	libdwarf_build_type='system'
+	cf_check_result no
 
+	if cf_test_header '<libdwarf/libdwarf.h>'
+	then
+		CPPFLAGS="${CPPFLAGS} -DERIS_LIBDWARF_LIBDWARF_H=1"
+	else
+		cf_ensure_header '<libdwarf.h>'
+	fi
 
-cf_test_program <<EOF
+	cf_test_program <<EOF
 #ifdef ERIS_LIBDWARF_LIBDWARF_H
 # include <libdwarf/libdwarf.h>
 #else
@@ -354,11 +386,10 @@ cf_test_program <<EOF
 #endif
 int main () { return dwarf_init (0, 0, 0, 0, 0, 0); }
 EOF
-cf_ensure_library -ldwarf -lelf
+	cf_ensure_library -ldwarf -lelf
 
-
-cf_checking "for dwarf_pubtype_type_die_offset()"
-cf_test_program <<EOF
+	cf_checking "for dwarf_pubtype_type_die_offset()"
+	cf_test_program <<EOF
 #ifdef ERIS_LIBDWARF_LIBDWARF_H
 # include <libdwarf/libdwarf.h>
 #else
@@ -366,19 +397,20 @@ cf_test_program <<EOF
 #endif
 int main () { return dwarf_pubtype_die_offset (0, 0, 0); }
 EOF
-if cf_test_link__ -ldwarf -lelf
-then
-	cf_check_result 'yes'
-else
-	if cf_test_link__ -ldwarf -lelf \
-		'-Ddwarf_pubtype_die_offset=dwarf_pubtype_type_die_offset'
+	if cf_test_link__ -ldwarf -lelf
 	then
-		# Nasty, nasty libdwarf
-		CPPFLAGS="${CPPFLAGS} -DERIS_WORKAROUND_DWARF_PUBTYPE_DIE_OFFSET=1"
-		cf_check_result 'using workaround'
+		cf_check_result 'yes'
 	else
-		cf_check_result 'no'
-		cf_die 'Could not find dwarf_pubtype_die_offset() in -ldwarf'
+		if cf_test_link__ -ldwarf -lelf \
+			'-Ddwarf_pubtype_die_offset=dwarf_pubtype_type_die_offset'
+		then
+			# Nasty, nasty libdwarf
+			CPPFLAGS="${CPPFLAGS} -DERIS_WORKAROUND_DWARF_PUBTYPE_DIE_OFFSET=1"
+			cf_check_result 'using workaround'
+		else
+			cf_check_result 'no'
+			cf_die 'Could not find dwarf_pubtype_die_offset() in -ldwarf'
+		fi
 	fi
 fi
 
@@ -389,25 +421,51 @@ then
 	cf_ensure_function dlopen -ldl
 	LIBS="${LIBS} -ldl"
 fi
-CPPFLAGS="${CPPFLAGS} -DLUA_USE_DLOPEN=1"
+
 
 ##################################### Optional headers and libraries ######
 
-if cf_test_function readline -lreadline
+cf_checking 'whether to use bundled Lua'
+if ${enable_bundled_lua}
 then
-	CPPFLAGS="${CPPFLAGS} -DLUA_USE_READLINE=1"
-	LIBS="${LIBS} -lreadline"
+	lua_build_type='bundled'
+	system_lua_bin=''
+	cf_check_result yes
+
+	if cf_test_function readline -lreadline
+	then
+		CPPFLAGS="${CPPFLAGS} -DLUA_USE_READLINE=1"
+		LIBS="${LIBS} -lreadline"
+	fi
+else
+	lua_build_type='system'
+	cf_check_result no
+
+	cf_checking 'for Lua interpreter'
+	system_lua_bin=$(cf_choose_program lua-5.3 lua5.3 lua5 lua)
+	if test "x${system_lua_bin}" = "x"
+	then
+		cf_check_result 'not found'
+		cf_die 'Make sure that the Lua interpreter is in your $PATH'
+	else
+		cf_check_result "${system_lua_bin}"
+	fi
 fi
 
 ####################################################### Final fixups ######
 
 cf_build_conf <<EOF
+obj      = ${objdir}
 prefix   = ${PREFIX}
 cc       = ${CC}
 CFLAGS   = ${CFLAGS} \${EXTRA_CFLAGS}
 CPPFLAGS = ${CPPFLAGS} \${EXTRA_CPPFLAGS}
 LDFLAGS  = ${LDFLAGS} \${EXTRA_LDFLAGS}
 libs     = ${LIBS} \${EXTRA_LIBS}
-obj      = ${objdir}
+
+lua_build = ${lua_build_type}
+system_lua_bin = ${system_lua_bin}
+libdwarf_build = ${libdwarf_build_type}
 EOF
+
 echo "build.conf written"

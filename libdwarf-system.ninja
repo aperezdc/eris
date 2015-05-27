@@ -1,0 +1,7 @@
+build ${obj}/eris.so : ld  $
+      ${obj}/eris-util.o   $
+      ${obj}/eris-trace.o  $
+      ${obj}/eris-typing.o $
+      ${obj}/eris-module.o | ${lua_exe}
+  ldflags = ${ldflags} -shared
+  libs = ${libs} -ldwarf -lelf
