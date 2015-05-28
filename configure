@@ -130,15 +130,15 @@ cf_result_yesno () {
 }
 
 cf_checking () {
-	echo "Checking $* ...[s "
+	echo -n "Checking $* ... "
 }
 
 cf_check_result () {
 	if test -n "$1"
 	then
-		echo "[u[1A $*"
+		echo "$*"
 	else
-		echo "[u[1A $(cf_result_yesno)"
+		cf_result_yesno
 	fi
 }
 
