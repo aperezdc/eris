@@ -449,4 +449,7 @@ else
 		output:finish(test)
 	end
 	output:report()
+	if #output.failed > 0 then
+		os.exit(1)
+	end
 end
