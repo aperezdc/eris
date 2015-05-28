@@ -2,6 +2,7 @@ libdwarf_version = 20150507
 libdwarf_tarball = ${obj}/downloads/libdwarf-${libdwarf_version}.tar.gz
 libdwarf_path    = ${obj}/libdwarf-${libdwarf_version}
 libdwarf_lib     = ${libdwarf_path}/libdwarf/libdwarf.a
+libdwarf_dep     = ${libdwarf_lib}
 cppflags         = ${cppflags} -I${libdwarf_path}/libdwarf $
                    -DERIS_WORKAROUND_DWARF_PUBTYPE_DIE_OFFSET=1 $
                    -DERIS_LIBDWARF_BUNDLED=1
@@ -32,14 +33,5 @@ build ${libdwarf_tarball} : urlfetch
 # A dependency on the libdwarf.h header is needed to force the bundled
 # libdwarf to be (at least) configured before building eris-module.o
 #
-build ${obj}/eris-module.o : cc eris-module.c $
-      | ${libdwarf_path}/libdwarf/libdwarf.h
-
-build ${obj}/eris.so : ld  $
-      ${obj}/eris-util.o   $
-      ${obj}/eris-trace.o  $
-      ${obj}/eris-typing.o $
-      ${obj}/eris-module.o $
-      ${libdwarf_lib} | ${lua_exe}
-  ldflags = ${ldflags} -shared
-  libs = ${libs} -lelf
+build eris-libdwarf.h : phony | ${libdwarf_path}/libdwarf/libdwarf.h $
+                                ${libdwarf_path}/libdwarf/dwarf.h

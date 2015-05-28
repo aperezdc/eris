@@ -19,6 +19,10 @@ LUA_SRCS     := lua.c
 LUA_SRCS     := $(addprefix ${LUA_SRCPATH}/src/,${LUA_SRCS})
 LUA_OBJS     := $(patsubst %.c,%.o,${LUA_SRCS})
 
+LUA_HEADERS  := lauxlib.h lualib.h lua.h
+LUA_HEADERS  := $(addprefix ${LUA_SRCPATH}/src/,${LUA_HEADERS})
+
+
 ${LUA_LIB}: ${LUA_LIB_OBJS}
 	${RUN_STATICLIB}
 
@@ -29,9 +33,12 @@ ${LUA_TARBALL}:
 	${RUN_FETCH_URL}
 
 ${LUA_TARBALL}: URL = http://www.lua.org/ftp/lua-${LUA_VERSION}.tar.gz
-${LUA_LIB_SRCS} ${LUA_SRCS}: ${LUA_TARBALL}
+${LUA_LIB_SRCS} ${LUA_SRCS} ${LUA_HEADERS}: ${LUA_TARBALL}
 	${RUN_UNTARGZ}
 	$Q touch ${LUA_LIB_SRCS} ${LUA_SRCS}
+
+
+eris-lua.h: ${LUA_HEADERS}
 
 
 clean-lua:

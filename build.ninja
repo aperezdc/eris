@@ -30,18 +30,24 @@ rule ld
 include lua-${lua_build}.ninja
 include libdwarf-${libdwarf_build}.ninja
 
-# Eris sources. The rules for building eris-module.o and eris.so are
-# are in the libdwarf-*.ninja files, because of their dependencies on
-# files of the (optioally) bundled libdwarf copy.
+# Lua module: eris.so
 #
 build ${obj}/eris-util.o   : cc eris-util.c
 build ${obj}/eris-trace.o  : cc eris-trace.c
 build ${obj}/eris-typing.o : cc eris-typing.c
+build ${obj}/eris-module.o : cc eris-module.c | eris-lua.h eris-libdwarf.h
+build ${obj}/eris.so : ld  $
+      ${obj}/eris-util.o   $
+      ${obj}/eris-trace.o  $
+      ${obj}/eris-typing.o $
+      ${obj}/eris-module.o | ${libdwarf_dep}
+  ldflags = ${ldflags} -shared
+  libs = ${libs} ${libdwarf_lib} -lelf
 
 # Lua module: testutil.so
 #
-build ${obj}/testutil-module.o : cc testutil-module.c
-build ${obj}/testutil.so : ld ${obj}/testutil-module.o | ${lua_exe}
+build ${obj}/testutil-module.o : cc testutil-module.c | eris-lua.h
+build ${obj}/testutil.so : ld ${obj}/testutil-module.o
   ldflags = ${ldflags} -shared -Wl,--no-allow-shlib-undefined
 
 # Library used by the test suite.

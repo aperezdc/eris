@@ -116,7 +116,15 @@ build ${lua_path}/src/lapi.c     $
       ${lua_path}/src/lzio.c     $
       ${lua_path}/src/lua.c      $
       ${lua_path}/src/luac.c     $
+      ${lua_path}/src/lua.h      $
+      ${lua_path}/src/lualib.h   $
+      ${lua_path}/src/lauxlib.h  $
     : untargz ${lua_tarball}
 
 build ${lua_tarball} : urlfetch
   url = http://www.lua.org/ftp/lua-${lua_version}.tar.gz
+
+build eris-lua.h : phony | ${lua_path}/src/lauxlib.h $
+                           ${lua_path}/src/lualib.h  $
+                           ${lua_path}/src/lua.h     $
+                        || ${lua_exe}

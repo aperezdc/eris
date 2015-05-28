@@ -19,7 +19,8 @@ ${LIBDWARF_SRCPATH}/libdwarf/libdwarf.h: ${LIBDWARF_SRCPATH}/libdwarf/configure
 ${LIBDWARF_SRCPATH}/libdwarf/configure \
 ${LIBDWARF_SRCPATH}/libdwarf/dwarf.h: ${LIBDWARF_TARBALL}
 	${RUN_UNTARGZ}
-	$Q touch $@
+	$Q touch ${LIBDWARF_SRCPATH}/libdwarf/configure \
+	         ${LIBDWARF_SRCPATH}/libdwarf/dwarf.h
 
 .NOTPARALLEL: ${LIBDWARF_SRCPATH}/libdwarf/configure \
               ${LIBDWARF_SRCPATH}/libdwarf/dwarf.h   \
@@ -30,11 +31,8 @@ ${LIBDWARF_TARBALL}: URL = https://github.com/Distrotech/libdwarf/archive/${LIBD
 ${LIBDWARF_TARBALL}:
 	${RUN_FETCH_URL}
 
-# A dependency on the libdwarf.h header is needed to force the bundled
-# libdwarf to be (at least) configured before building eris-module.o
-#
-${OUT}/eris-module.o: ${LIBDWARF_SRCPATH}/libdwarf/libdwarf.h
-
+eris-libdwarf.h: ${LIBDWARF_SRCPATH}/libdwarf/libdwarf.h \
+	             ${LIBDWARF_SRCPATH}/libdwarf/dwarf.h
 
 libdwarf-clean: ${LIBDWARF_SRCPATH}/libdwarf/Makefile
 	$Q ${MAKE} -s -C ${LIBDWARF_SRCPATH}/libdwarf clean

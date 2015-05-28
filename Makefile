@@ -97,6 +97,9 @@ clean:
 	$Q ${RM} ${OUT}/testutil.so ${TESTUTIL_MODULE_OBJS}
 	$Q ${RM} ${OUT}/libtest.so ${OUT}/libtest.o
 
+eris-module.c: eris-lua.h eris-libdwarf.h
+testutil-module.c: eris-lua.h
+
 ${OUT}/eris.so: ${ERIS_MODULE_OBJS} ${LIBDWARF}
 ${OUT}/eris.so: LDFLAGS += -shared
 ${OUT}/eris.so: LDLIBS += ${LIBDWARF_LDLIBS}
