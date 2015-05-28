@@ -32,15 +32,17 @@ include libdwarf-${libdwarf_build}.ninja
 
 # Lua module: eris.so
 #
-build ${obj}/eris-util.o   : cc eris-util.c
-build ${obj}/eris-trace.o  : cc eris-trace.c
-build ${obj}/eris-typing.o : cc eris-typing.c
-build ${obj}/eris-module.o : cc eris-module.c | eris-lua.h eris-libdwarf.h
-build ${obj}/eris.so : ld  $
-      ${obj}/eris-util.o   $
-      ${obj}/eris-trace.o  $
-      ${obj}/eris-typing.o $
-      ${obj}/eris-module.o | ${libdwarf_dep}
+build ${obj}/eris-util.o      : cc eris-util.c
+build ${obj}/eris-trace.o     : cc eris-trace.c
+build ${obj}/eris-typing.o    : cc eris-typing.c
+build ${obj}/eris-typecache.o : cc eris-typecache.c
+build ${obj}/eris-module.o    : cc eris-module.c | eris-lua.h eris-libdwarf.h
+build ${obj}/eris.so : ld     $
+      ${obj}/eris-util.o      $
+      ${obj}/eris-trace.o     $
+      ${obj}/eris-typing.o    $
+      ${obj}/eris-typecache.o $
+      ${obj}/eris-module.o    | ${libdwarf_dep}
   ldflags = ${ldflags} -shared
   libs = ${libs} ${libdwarf_lib} -lelf
 

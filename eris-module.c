@@ -8,8 +8,10 @@
 #include "eris-libdwarf.h"
 #include "eris-lua.h"
 #include "eris-typing.h"
+#include "eris-typecache.h"
 #include "eris-trace.h"
 #include "eris-util.h"
+#include "uthash.h"
 
 #include <libelf.h>
 #include <dlfcn.h>
@@ -33,7 +35,6 @@
 typedef struct _ErisLibrary  ErisLibrary;
 
 
-
 /*
  * Data needed for each library loaded by "eris.load()".
  */
@@ -48,6 +49,8 @@ struct _ErisLibrary {
     Dwarf_Signed  d_num_globals;
     Dwarf_Type   *d_types;
     Dwarf_Signed  d_num_types;
+
+    ErisTypeCache type_cache;
 };
 
 
@@ -163,10 +166,17 @@ static const luaL_Reg eris_typeinfo_methods[] = {
 };
 
 
-static Dwarf_Die lookup_die (ErisLibrary *library,
+
+static Dwarf_Off
+eris_library_get_tue_offset (ErisLibrary *library,
                              const char  *name,
                              Dwarf_Error *d_error);
-static Dwarf_Die lookup_tue (ErisLibrary *library,
+static Dwarf_Die
+eris_library_fetch_die (ErisLibrary *library,
+                        Dwarf_Off    d_offset,
+                        Dwarf_Error *d_error);
+
+static Dwarf_Die lookup_die (ErisLibrary *library,
                              const char  *name,
                              Dwarf_Error *d_error);
 
@@ -255,12 +265,14 @@ void eris_library_free (ErisLibrary *el)
 {
     TRACE ("%p\n", el);
 
+    eris_type_cache_free (&el->type_cache);
+
     if (el->d_globals)
         dwarf_globals_dealloc (el->d_debug, el->d_globals, el->d_num_globals);
     if (el->d_types)
         dwarf_pubtypes_dealloc (el->d_debug, el->d_types, el->d_num_types);
 
-    Dwarf_Error d_error;
+    Dwarf_Error d_error = 0;
     dwarf_finish (el->d_debug, &d_error);
 
     close (el->fd);
@@ -480,7 +492,7 @@ die_to_typeinfo (ErisLibrary  *library,
                                                                  d_type_die,
                                                                  d_error);
             if (eris_typeinfo_is_valid (typeinfo)) {
-                Dwarf_Error d_name_error;
+                Dwarf_Error d_name_error = 0;
                 const char* name = die_get_string_attribute (library,
                                                              d_type_die,
                                                              DW_AT_name,
@@ -521,7 +533,7 @@ die_to_typeinfo (ErisLibrary  *library,
                                                       d_error);
 
             if (eris_typeinfo_is_valid (typeinfo)) {
-                Dwarf_Error d_name_error;
+                Dwarf_Error d_name_error = 0;
                 const char *name = die_get_string_attribute (library,
                                                              d_type_die,
                                                              DW_AT_name,
@@ -1075,6 +1087,7 @@ eris_load (lua_State *L)
     el->d_num_globals = d_num_globals;
     el->d_types = d_types;
     el->d_num_types = d_num_types;
+    eris_type_cache_init (&el->type_cache);
     eris_library_push_userdata (L, el);
     TRACE ("new ErisLibrary* at %p\n", el);
     return 1;
@@ -1088,23 +1101,39 @@ eris_type (lua_State *L)
     const char *name = luaL_checkstring (L, 2);
 
     Dwarf_Error d_error = 0;
-    Dwarf_Die d_type_die = lookup_tue (el, name, &d_error);
-    if (!d_type_die) {
-        return luaL_error (L, "could not look up DWARF debug information "
-                           "for type '%s' (library: %p; %s)",
-                           name, el, dw_errmsg (d_error));
+    Dwarf_Off d_offset = eris_library_get_tue_offset (el, name, &d_error);
+    if (!d_offset) {
+        return luaL_error (L, "%s: could not look up DWARF TUE offset "
+                           "(library: %p; %s)", name, el, dw_errmsg (d_error));
     }
 
-    ErisTypeInfo *typeinfo = die_to_typeinfo (el,
-                                              d_type_die,
-                                              &d_error);
-    dwarf_dealloc (el->d_debug, d_type_die, DW_DLA_DIE);
+    const ErisTypeInfo *typeinfo =
+            eris_type_cache_lookup (&el->type_cache, d_offset);
 
-    if (!typeinfo || !eris_typeinfo_is_valid (typeinfo)) {
-        return luaL_error (L, "%s: Could not convert TUE to ErisTypeInfo (%s)",
-                           name, dw_errmsg (d_error));
+    if (!typeinfo) {
+        TRACE ("%s (%#lx): type cache miss\n", name, (long) d_offset);
+
+        Dwarf_Die d_type_die = eris_library_fetch_die (el, d_offset, &d_error);
+        if (!d_type_die) {
+            return luaL_error (L, "could not look up DWARF debug information "
+                               "for type '%s' (library: %p; %s)",
+                               name, el, dw_errmsg (d_error));
+        }
+
+        typeinfo = die_to_typeinfo (el, d_type_die, &d_error);
+        dwarf_dealloc (el->d_debug, d_type_die, DW_DLA_DIE);
+
+        if (!typeinfo || !eris_typeinfo_is_valid (typeinfo)) {
+            return luaL_error (L, "%s: Could not convert TUE to ErisTypeInfo (%s)",
+                               name, dw_errmsg (d_error));
+        }
+
+        eris_type_cache_add (&el->type_cache, d_offset, typeinfo);
+    } else {
+        TRACE ("%s (%#lx): type cache hit\n", name, (long) d_offset);
     }
 
+    CHECK_NOT_NULL (typeinfo);
     eris_typeinfo_push_userdata (L, typeinfo);
     return 1;
 }
@@ -1184,9 +1213,34 @@ lookup_die (ErisLibrary *el,
 
 
 static Dwarf_Die
-lookup_tue (ErisLibrary *library,
-            const char  *name,
-            Dwarf_Error *d_error)
+eris_library_fetch_die (ErisLibrary *library,
+                        Dwarf_Off    d_offset,
+                        Dwarf_Error *d_error)
+{
+    CHECK_NOT_NULL (library);
+    CHECK_NOT_ZERO (d_offset);
+    CHECK_NOT_NULL (d_error);
+
+    Dwarf_Die d_die = 0;
+    if (dwarf_offdie (library->d_debug,
+                      d_offset,
+                      &d_die,
+                      d_error) != DW_DLV_OK) {
+        TRACE ("could not fetch DIE %#lx (%s)\n",
+               (long int) d_offset,
+               dw_errmsg (*d_error));
+        return NULL;
+    }
+
+    CHECK_NOT_NULL (d_die);
+    return d_die;
+}
+
+
+static Dwarf_Off
+eris_library_get_tue_offset (ErisLibrary *library,
+                             const char  *name,
+                             Dwarf_Error *d_error)
 {
     CHECK_NOT_NULL (library);
     CHECK_NOT_NULL (name);
@@ -1209,29 +1263,20 @@ lookup_tue (ErisLibrary *library,
 
         const bool found = (strcmp (type_name, name) == 0);
         dwarf_dealloc (library->d_debug, type_name, DW_DLA_STRING);
-        type_name = NULL;
 
         if (found) {
-            Dwarf_Off d_offset;
+            Dwarf_Off d_offset = 0;
             if (dwarf_pubtype_die_offset (library->d_types[i],
                                           &d_offset,
                                           d_error) != DW_DLV_OK) {
                 TRACE ("could not obtain TUE offset (%s)\n",
                        dw_errmsg (*d_error));
-                return NULL;
+                return 0;
             }
-
-            Dwarf_Die d_die;
-            if (dwarf_offdie (library->d_debug,
-                              d_offset,
-                              &d_die,
-                              d_error) != DW_DLV_OK) {
-                TRACE ("could not obtain TUE (%s)\n", dw_errmsg (*d_error));
-                return NULL;
-            }
-            return d_die;
+            CHECK_NOT_ZERO (d_offset);
+            return d_offset;
         }
     }
 
-    return NULL;
+    return 0;
 }

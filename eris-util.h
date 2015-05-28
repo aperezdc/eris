@@ -42,9 +42,15 @@
 # define CHECK_NOT_NULL(expression)                         \
     do {                                                    \
         if ((expression) == NULL)                           \
-            CHECK_FAILED ("expression: %s\n"                \
-                          "expected: non-NULL\n",           \
-                          #expression);                     \
+            CHECK_FAILED ("expression: " #expression "\n"   \
+                          "expected: non-NULL\n");          \
+    } while (0)
+
+# define CHECK_NOT_ZERO(expression)                         \
+    do {                                                    \
+        if ((expression) == 0)                              \
+            CHECK_FAILED ("expression: " #expression "\n"   \
+                          "expected: non-zero\n");          \
     } while (0)
 
 # define CHECK_STR_EQ(expected, expression)                 \
@@ -71,6 +77,7 @@ extern void eris_runtime_check_failed (const char *file,
 # define CHECK(e)                            ((void) 0)
 # define CHECK_NUMERIC_OP(o, e, x, t, vt, f) ((void) 0)
 # define CHECK_NOT_NULL(e)                   ((void) 0)
+# define CHECK_NOT_ZERO(e)                   ((void) 0)
 # define CHECK_STR_EQ(e, x)                  ((void) 0)
 #endif /* ERIS_DEBUG_CHECKS */
 
