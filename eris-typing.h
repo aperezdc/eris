@@ -43,6 +43,7 @@ typedef enum {
 
     ERIS_TYPE_VOID,
 
+    /* Base types. */
     ERIS_TYPE_S8,
     ERIS_TYPE_U8,
     ERIS_TYPE_S16,
@@ -55,9 +56,13 @@ typedef enum {
     ERIS_TYPE_FLOAT,
     ERIS_TYPE_DOUBLE,
 
+    /* Synthetic types. */
     ERIS_TYPE_POINTER,
     ERIS_TYPE_TYPEDEF,
+    ERIS_TYPE_CONST,
+    ERIS_TYPE_ARRAY,
 
+    /* Compound types. */
     ERIS_TYPE_STRUCT,
 } ErisType;
 
@@ -74,7 +79,12 @@ typedef struct {
 } ErisTypeInfoMember;
 
 
-extern ErisTypeInfo* eris_typeinfo_new (ErisType type, uint16_t n_members);
+extern ErisTypeInfo* eris_typeinfo_new_const (const ErisTypeInfo *base);
+extern ErisTypeInfo* eris_typeinfo_new_typedef (const ErisTypeInfo *base,
+                                                const char         *name);
+extern ErisTypeInfo* eris_typeinfo_new_base_type (ErisType    type,
+                                                  const char *name);
+
 extern const char*   eris_typeinfo_name (const ErisTypeInfo *typeinfo);
 extern ErisType      eris_typeinfo_type (const ErisTypeInfo *typeinfo);
 extern bool          eris_typeinfo_equal (const ErisTypeInfo *a,
@@ -82,11 +92,13 @@ extern bool          eris_typeinfo_equal (const ErisTypeInfo *a,
 extern uint32_t      eris_typeinfo_sizeof (const ErisTypeInfo *typeinfo);
 extern bool          eris_typeinfo_is_valid (const ErisTypeInfo *typeinfo);
 extern uint16_t      eris_typeinfo_n_members (const ErisTypeInfo *typeinfo);
-extern bool          eris_typeinfo_is_readonly (const ErisTypeInfo *typeinfo);
+extern bool          eris_typeinfo_is_const (const ErisTypeInfo *typeinfo);
+extern bool          eris_typeinfo_is_array (const ErisTypeInfo *typeinfo,
+                                             uint64_t           *n_items);
 extern void          eris_typeinfo_set_name (ErisTypeInfo *typeinfo,
                                              const char   *name);
-extern void          eris_typeinfo_set_is_readonly (ErisTypeInfo *typeinfo,
-                                                    bool          readonly);
+
+extern const ErisTypeInfo* eris_typeinfo_base (const ErisTypeInfo *typeinfo);
 
 extern ErisTypeInfoMember*
 eris_typeinfo_named_member (ErisTypeInfo *typeinfo,

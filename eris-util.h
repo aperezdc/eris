@@ -92,6 +92,17 @@ extern void eris_runtime_check_failed (const char *file,
 #define CHECK_SIZE_EQ(e, x)  CHECK_NUMERIC_OP (==, e, x, size_t,   PRIuMAX)
 #define CHECK_SSIZE_EQ(e, x) CHECK_NUMERIC_OP (==, e, x, ssize_t,  PRIiMAX)
 
+#define CHECK_I8_NE(e, x)    CHECK_NUMERIC_OP (!=, e, x, int8_t,   PRIi8)
+#define CHECK_U8_NE(e, x)    CHECK_NUMERIC_OP (!=, e, x, uint8_t,  PRIu8)
+#define CHECK_I16_NE(e, x)   CHECK_NUMERIC_OP (!=, e, x, int16_t,  PRIi16)
+#define CHECK_U16_NE(e, x)   CHECK_NUMERIC_OP (!=, e, x, uint16_t, PRIu16)
+#define CHECK_I32_NE(e, x)   CHECK_NUMERIC_OP (!=, e, x, int32_t,  PRIi32)
+#define CHECK_U32_NE(e, x)   CHECK_NUMERIC_OP (!=, e, x, uint32_t, PRIu32)
+#define CHECK_INT_NE(e, x)   CHECK_NUMERIC_OP (!=, e, x, int,      "i")
+#define CHECK_UINT_NE(e, x)  CHECK_NUMERIC_OP (!=, e, x, unsigned, "u")
+#define CHECK_SIZE_NE(e, x)  CHECK_NUMERIC_OP (!=, e, x, size_t,   PRIuMAX)
+#define CHECK_SSIZE_NE(e, x) CHECK_NUMERIC_OP (!=, e, x, ssize_t,  PRIiMAX)
+
 #define CHECK_I8_LT(e, x)    CHECK_NUMERIC_OP (< , e, x, int8_t,   PRIi8)
 #define CHECK_U8_LT(e, x)    CHECK_NUMERIC_OP (< , e, x, uint8_t,  PRIu8)
 #define CHECK_I16_LT(e, x)   CHECK_NUMERIC_OP (< , e, x, int16_t,  PRIi16)

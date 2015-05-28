@@ -119,7 +119,7 @@ l_eris_typeinfo_index (lua_State *L)
         } else if (!strcmp ("sizeof", field)) {
             lua_pushinteger (L, eris_typeinfo_sizeof (typeinfo));
         } else if (!strcmp ("readonly", field)) {
-            lua_pushboolean (L, eris_typeinfo_is_readonly (typeinfo));
+            lua_pushboolean (L, eris_typeinfo_is_const (typeinfo));
         } else {
             return luaL_error (L, "invalid field '%s'", field);
         }
@@ -175,6 +175,16 @@ static Dwarf_Die
 eris_library_fetch_die (ErisLibrary *library,
                         Dwarf_Off    d_offset,
                         Dwarf_Error *d_error);
+
+static const ErisTypeInfo*
+eris_library_lookup_type (ErisLibrary *library,
+                          Dwarf_Off    d_offset,
+                          Dwarf_Error *d_error);
+
+static const ErisTypeInfo*
+eris_library_build_typeinfo (ErisLibrary *library,
+                             Dwarf_Off    d_offset,
+                             Dwarf_Error *d_error);
 
 static Dwarf_Die lookup_die (ErisLibrary *library,
                              const char  *name,
@@ -396,6 +406,31 @@ die_get_die_reference_attribute (ErisLibrary *library,
 }
 
 
+static Dwarf_Off
+eris_library_get_die_ref_attribute_offset (ErisLibrary *library,
+                                           Dwarf_Die    d_die,
+                                           Dwarf_Half   d_attr_tag,
+                                           Dwarf_Error *d_error)
+{
+    CHECK_NOT_NULL (library);
+    CHECK_NOT_NULL (d_die);
+    CHECK_NOT_NULL (d_error);
+
+    Dwarf_Attribute d_attr = NULL;
+    if (dwarf_attr (d_die, d_attr_tag, &d_attr, d_error) != DW_DLV_OK)
+        return DW_DLV_BADOFFSET;
+
+    CHECK_NOT_NULL (d_attr);
+
+    Dwarf_Off d_offset;
+    bool success = dwarf_global_formref (d_attr,
+                                         &d_offset,
+                                         d_error) == DW_DLV_OK;
+    dwarf_dealloc (library->d_debug, d_attr, DW_DLA_ATTR);
+    return success ? d_offset : DW_DLV_BADOFFSET;
+}
+
+
 static char*
 die_get_string_attribute (ErisLibrary *library,
                           Dwarf_Die    d_die,
@@ -432,125 +467,8 @@ die_get_uint_attribute (ErisLibrary    *library,
 }
 
 
-
-static ErisTypeInfo*
-die_base_type_get_typeinfo (ErisLibrary *library,
-                            Dwarf_Die    d_type_die,
-                            Dwarf_Error *d_error)
-{
-    Dwarf_Unsigned d_encoding, d_byte_size;
-
-    if (!die_get_uint_attribute (library,
-                                 d_type_die,
-                                 DW_AT_encoding,
-                                 &d_encoding,
-                                 d_error) ||
-        !die_get_uint_attribute (library,
-                                 d_type_die,
-                                 DW_AT_byte_size,
-                                 &d_byte_size,
-                                 d_error))
-            return NULL;
-
-#define TYPEINFO_ITEM(suffix, ctype)                            \
-        case sizeof (ctype):                                    \
-            return eris_typeinfo_new (ERIS_TYPE_ ## suffix, 0); \
-
-    switch (d_encoding) {
-        case DW_ATE_float:
-            switch (d_byte_size) { FLOAT_TYPES (TYPEINFO_ITEM) }
-            break;
-        case DW_ATE_signed:
-        case DW_ATE_signed_char:
-            switch (d_byte_size) { INTEGER_S_TYPES (TYPEINFO_ITEM) }
-            break;
-        case DW_ATE_unsigned:
-        case DW_ATE_unsigned_char:
-            switch (d_byte_size) { INTEGER_U_TYPES (TYPEINFO_ITEM) }
-            break;
-    }
-#undef TYPEINFO_ITEM
-
-    return NULL;
-}
-
-
-static ErisTypeInfo*
-die_to_typeinfo (ErisLibrary  *library,
-                 Dwarf_Die     d_type_die,
-                 Dwarf_Error  *d_error)
-{
-    Dwarf_Half d_tag;
-    if (dwarf_tag (d_type_die,
-                   &d_tag,
-                   d_error) != DW_DLV_OK)
-        return NULL;
-
-    switch (d_tag) {
-        case DW_TAG_base_type: {
-            ErisTypeInfo *typeinfo = die_base_type_get_typeinfo (library,
-                                                                 d_type_die,
-                                                                 d_error);
-            if (eris_typeinfo_is_valid (typeinfo)) {
-                Dwarf_Error d_name_error = 0;
-                const char* name = die_get_string_attribute (library,
-                                                             d_type_die,
-                                                             DW_AT_name,
-                                                             &d_name_error);
-                if (name) eris_typeinfo_set_name (typeinfo, name);
-            }
-            return typeinfo;
-        }
-
-        case DW_TAG_const_type: {
-            Dwarf_Die d_base_type_die =
-                die_get_die_reference_attribute (library,
-                                                 d_type_die,
-                                                 DW_AT_type,
-                                                 d_error);
-            if (!d_base_type_die)
-                return NULL;
-
-            ErisTypeInfo *typeinfo = die_to_typeinfo (library,
-                                                      d_base_type_die,
-                                                      d_error);
-            dwarf_dealloc (library->d_debug, d_base_type_die, DW_DLA_DIE);
-            eris_typeinfo_set_is_readonly (typeinfo, true);
-            return typeinfo;
-        }
-
-        case DW_TAG_typedef: {
-            Dwarf_Die d_base_type_die =
-                die_get_die_reference_attribute (library,
-                                                 d_type_die,
-                                                 DW_AT_type,
-                                                 d_error);
-            if (!d_base_type_die)
-                return NULL;
-
-            ErisTypeInfo *typeinfo = die_to_typeinfo (library,
-                                                      d_base_type_die,
-                                                      d_error);
-
-            if (eris_typeinfo_is_valid (typeinfo)) {
-                Dwarf_Error d_name_error = 0;
-                const char *name = die_get_string_attribute (library,
-                                                             d_type_die,
-                                                             DW_AT_name,
-                                                             &d_name_error);
-                if (name) eris_typeinfo_set_name (typeinfo, name);
-            }
-            dwarf_dealloc (library->d_debug, d_base_type_die, DW_DLA_DIE);
-            return typeinfo;
-        }
-        default:
-            return NULL;
-    }
-}
-
-
 static inline const char*
-dw_errmsg(Dwarf_Error d_error)
+dw_errmsg (Dwarf_Error d_error)
 {
     return d_error ? dwarf_errmsg (d_error) : "no libdwarf error";
 }
@@ -565,24 +483,22 @@ make_variable_wrapper (lua_State   *L,
                        Dwarf_Half   d_tag)
 {
     Dwarf_Error d_error = 0;
-    Dwarf_Die d_type_die = die_get_die_reference_attribute (library,
-                                                            d_die,
-                                                            DW_AT_type,
-                                                            &d_error);
-    if (!d_type_die) {
-        return luaL_error (L, "%s: Could not obtain DW_AT_type DIE (%s)",
+    Dwarf_Off d_offset =
+            eris_library_get_die_ref_attribute_offset (library,
+                                                       d_die,
+                                                       DW_AT_type,
+                                                       &d_error);
+    if (d_offset == DW_DLV_BADOFFSET) {
+        return luaL_error (L, "%s: could not obtain DW_AT_type offset (%s)",
                            name, dw_errmsg (d_error));
     }
 
-    ErisTypeInfo *typeinfo = die_to_typeinfo (library,
-                                              d_type_die,
-                                              &d_error);
-    dwarf_dealloc (library->d_debug, d_type_die, DW_DLA_DIE);
-    dwarf_dealloc (library->d_debug, d_die, DW_DLA_DIE);
-
+    const ErisTypeInfo* typeinfo = eris_library_lookup_type (library,
+                                                             d_offset,
+                                                             &d_error);
     if (!typeinfo || !eris_typeinfo_is_valid (typeinfo)) {
-        return luaL_error (L, "%s: Could not convert DIE to ErisTypeInfo (%s)",
-                           name, dw_errmsg (d_error));
+        return luaL_error (L, "%s: could not obtain type information (%s)",
+                           dw_errmsg (d_error));
     }
 
     ErisVariable *ev = lua_newuserdata (L, sizeof (ErisVariable));
@@ -818,10 +734,18 @@ eris_variable_set (lua_State    *L,
     CHECK_NOT_NULL (L);
     CHECK_NOT_NULL (ev);
 
-    if (eris_typeinfo_is_readonly (ev->typeinfo)) {
+    if (eris_typeinfo_is_const (ev->typeinfo)) {
         return luaL_error (L, "read-only variable (%p:%s)",
                            ev->library, ev->name);
     }
+
+    const ErisTypeInfo *typeinfo = ev->typeinfo;
+    ErisType type = eris_typeinfo_type (typeinfo);
+    while (type == ERIS_TYPE_TYPEDEF || type == ERIS_TYPE_CONST) {
+        typeinfo = eris_typeinfo_base (typeinfo);
+        type = eris_typeinfo_type (typeinfo);
+    }
+
     if (index == 0) {
         return luaL_error (L, "0 is not a valid index");
     }
@@ -845,7 +769,7 @@ eris_variable_set (lua_State    *L,
             ((ctype*) ev->address)[index] = (ctype) luaL_checknumber (L, -1); \
             break;
 
-    switch (eris_typeinfo_type (ev->typeinfo)) {
+    switch (type) {
         INTEGER_TYPES (SET_INTEGER)
         FLOAT_TYPES (SET_FLOAT)
         default:
@@ -867,6 +791,13 @@ eris_variable_get (lua_State    *L,
     CHECK_NOT_NULL (L);
     CHECK_NOT_NULL (ev);
 
+    const ErisTypeInfo *typeinfo = ev->typeinfo;
+    ErisType type = eris_typeinfo_type (typeinfo);
+    while (type == ERIS_TYPE_TYPEDEF || type == ERIS_TYPE_CONST) {
+        typeinfo = eris_typeinfo_base (typeinfo);
+        type = eris_typeinfo_type (typeinfo);
+    }
+
     /* Adjust index, do bounds checking. */
     if (index < 0) index += ev->n_items;
     if (index <= 0 || index > ev->n_items) {
@@ -885,7 +816,7 @@ eris_variable_get (lua_State    *L,
             lua_pushnumber (L, ((ctype*) ev->address)[index]); \
             break;
 
-    switch (eris_typeinfo_type (ev->typeinfo)) {
+    switch (type) {
         INTEGER_TYPES (GET_INTEGER)
         FLOAT_TYPES (GET_FLOAT)
         default:
@@ -1108,32 +1039,11 @@ eris_type (lua_State *L)
     }
 
     const ErisTypeInfo *typeinfo =
-            eris_type_cache_lookup (&el->type_cache, d_offset);
-
+            eris_library_lookup_type (el, d_offset, &d_error);
     if (!typeinfo) {
-        TRACE ("%s (%#lx): type cache miss\n", name, (long) d_offset);
-
-        Dwarf_Die d_type_die = eris_library_fetch_die (el, d_offset, &d_error);
-        if (!d_type_die) {
-            return luaL_error (L, "could not look up DWARF debug information "
-                               "for type '%s' (library: %p; %s)",
-                               name, el, dw_errmsg (d_error));
-        }
-
-        typeinfo = die_to_typeinfo (el, d_type_die, &d_error);
-        dwarf_dealloc (el->d_debug, d_type_die, DW_DLA_DIE);
-
-        if (!typeinfo || !eris_typeinfo_is_valid (typeinfo)) {
-            return luaL_error (L, "%s: Could not convert TUE to ErisTypeInfo (%s)",
-                               name, dw_errmsg (d_error));
-        }
-
-        eris_type_cache_add (&el->type_cache, d_offset, typeinfo);
-    } else {
-        TRACE ("%s (%#lx): type cache hit\n", name, (long) d_offset);
+        return luaL_error (L, "%s: no type info (%s)",
+                           name, dw_errmsg (d_error));
     }
-
-    CHECK_NOT_NULL (typeinfo);
     eris_typeinfo_push_userdata (L, typeinfo);
     return 1;
 }
@@ -1221,7 +1131,7 @@ eris_library_fetch_die (ErisLibrary *library,
     CHECK_SIZE_NE (DW_DLV_BADOFFSET, d_offset);
     CHECK_NOT_NULL (d_error);
 
-    Dwarf_Die d_die = 0;
+    Dwarf_Die d_die = NULL;
     if (dwarf_offdie (library->d_debug,
                       d_offset,
                       &d_die,
@@ -1234,6 +1144,210 @@ eris_library_fetch_die (ErisLibrary *library,
 
     CHECK_NOT_NULL (d_die);
     return d_die;
+}
+
+
+static const ErisTypeInfo*
+eris_library_lookup_type (ErisLibrary *library,
+                          Dwarf_Off    d_offset,
+                          Dwarf_Error *d_error)
+{
+    CHECK_NOT_NULL (library);
+    CHECK_SIZE_NE (DW_DLV_BADOFFSET, d_offset);
+    CHECK_NOT_NULL (d_error);
+
+    const ErisTypeInfo *typeinfo =
+            eris_type_cache_lookup (&library->type_cache, d_offset);
+
+    if (!typeinfo) {
+        TRACE ("type cache miss (%#lx)\n", (unsigned long) d_offset);
+        typeinfo = eris_library_build_typeinfo (library, d_offset, d_error);
+        CHECK_NOT_NULL (typeinfo);
+        eris_type_cache_add (&library->type_cache, d_offset, typeinfo);
+    } else {
+        TRACE ("type cache hit (%#lx)\n", (unsigned long) d_offset);
+    }
+    return typeinfo;
+}
+
+
+static const ErisTypeInfo*
+eris_library_build_base_type_typeinfo (ErisLibrary *library,
+                                       Dwarf_Die    d_type_die,
+                                       Dwarf_Error *d_error)
+{
+    CHECK_NOT_NULL (library);
+    CHECK_NOT_NULL (d_type_die);
+    CHECK_NOT_NULL (d_error);
+
+    Dwarf_Unsigned d_encoding, d_byte_size;
+
+    if (!die_get_uint_attribute (library,
+                                 d_type_die,
+                                 DW_AT_encoding,
+                                 &d_encoding,
+                                 d_error) ||
+        !die_get_uint_attribute (library,
+                                 d_type_die,
+                                 DW_AT_byte_size,
+                                 &d_byte_size,
+                                 d_error))
+            return NULL;
+
+    ErisType type = ERIS_TYPE_NONE;
+
+#define TYPEINFO_ITEM(suffix, ctype)     \
+        case sizeof (ctype):             \
+            type = ERIS_TYPE_ ## suffix; \
+            break;
+
+    switch (d_encoding) {
+        case DW_ATE_float:
+            switch (d_byte_size) { FLOAT_TYPES (TYPEINFO_ITEM) }
+            break;
+        case DW_ATE_signed:
+        case DW_ATE_signed_char:
+            switch (d_byte_size) { INTEGER_S_TYPES (TYPEINFO_ITEM) }
+            break;
+        case DW_ATE_unsigned:
+        case DW_ATE_unsigned_char:
+            switch (d_byte_size) { INTEGER_U_TYPES (TYPEINFO_ITEM) }
+            break;
+    }
+#undef TYPEINFO_ITEM
+
+    CHECK_UINT_NE (ERIS_TYPE_NONE, type);
+
+    Dwarf_Error d_name_error = 0;
+    const char* name = die_get_string_attribute (library,
+                                                 d_type_die,
+                                                 DW_AT_name,
+                                                 &d_name_error);
+    if (!name) {
+        Dwarf_Off d_global_offset = 0;
+        Dwarf_Off d_local_offset = 0;
+        Dwarf_Error d_offsets_error = 0;
+        if (dwarf_die_offsets (d_type_die,
+                               &d_global_offset,
+                               &d_local_offset,
+                               &d_offsets_error) == DW_DLV_OK) {
+            TRACE ("no type name for TUE %#lx (%s)\n",
+                   (unsigned long) d_global_offset,
+                   dw_errmsg (d_name_error));
+        } else {
+            TRACE ("no type name for TUE at %p (%s)\n",
+                   d_type_die, dw_errmsg (d_name_error));
+        }
+    }
+
+    return eris_typeinfo_new_base_type (type, name);
+}
+
+
+static const ErisTypeInfo*
+eris_library_build_typedef_typeinfo (ErisLibrary *library,
+                                     Dwarf_Die    d_type_die,
+                                     Dwarf_Error *d_error)
+{
+    CHECK_NOT_NULL (library);
+    CHECK_NOT_NULL (d_type_die);
+    CHECK_NOT_NULL (d_error);
+
+    const char *name = die_get_string_attribute (library,
+                                                 d_type_die,
+                                                 DW_AT_name,
+                                                 d_error);
+    if (!name) {
+        TRACE ("cannot get TUE DW_AT_name (%s)\n", dw_errmsg (*d_error));
+        return NULL;
+    }
+
+    Dwarf_Off d_offset =
+            eris_library_get_die_ref_attribute_offset (library,
+                                                       d_type_die,
+                                                       DW_AT_type,
+                                                       d_error);
+    if (d_offset == DW_DLV_BADOFFSET) {
+        TRACE ("cannot get TUE offset (%s)\n", dw_errmsg (*d_error));
+        return NULL;
+    }
+
+    const ErisTypeInfo *base =
+            eris_library_lookup_type (library, d_offset, d_error);
+    if (!base) {
+        TRACE ("cannot get TUE (%s)\n", dw_errmsg (*d_error));
+        return NULL;
+    }
+
+    return eris_typeinfo_new_typedef (base, name);
+}
+
+
+static const ErisTypeInfo*
+eris_library_build_const_type_typeinfo (ErisLibrary *library,
+                                        Dwarf_Die    d_type_die,
+                                        Dwarf_Error *d_error)
+{
+    CHECK_NOT_NULL (library);
+    CHECK_NOT_NULL (d_type_die);
+    CHECK_NOT_NULL (d_error);
+
+    Dwarf_Off d_offset =
+            eris_library_get_die_ref_attribute_offset (library,
+                                                       d_type_die,
+                                                       DW_AT_type,
+                                                       d_error);
+    if (d_offset == DW_DLV_BADOFFSET) {
+        TRACE ("cannot get TUE offset (%s)\n", dw_errmsg (*d_error));
+        return NULL;
+    }
+
+    const ErisTypeInfo *base =
+            eris_library_lookup_type (library, d_offset, d_error);
+    if (!base) {
+        TRACE ("cannot get TUE (%s)\n", dw_errmsg (*d_error));
+        return NULL;
+    }
+
+    return eris_typeinfo_new_const (base);
+}
+
+
+
+static const ErisTypeInfo*
+eris_library_build_typeinfo (ErisLibrary *library,
+                             Dwarf_Off    d_offset,
+                             Dwarf_Error *d_error)
+{
+    CHECK_NOT_NULL (library);
+    CHECK_SIZE_NE (DW_DLV_BADOFFSET, d_offset);
+    CHECK_NOT_NULL (d_error);
+
+    Dwarf_Die d_type_die = eris_library_fetch_die (library,
+                                                   d_offset,
+                                                   d_error);
+    if (!d_type_die) return NULL;
+
+    const ErisTypeInfo *result = NULL;
+    Dwarf_Half d_tag;
+    if (dwarf_tag (d_type_die, &d_tag, d_error) == DW_DLV_OK) {
+        switch (d_tag) {
+#define BUILD_TYPEINFO(name)                                            \
+        case DW_TAG_ ## name:                                           \
+            result = eris_library_build_ ## name ## _typeinfo (library, \
+                                           d_type_die, d_error); break;
+
+            DW_TYPE_TAG_NAMES (BUILD_TYPEINFO)
+
+#undef BUILD_TYPEINFO
+
+            default:
+                result = NULL;
+        }
+    }
+
+    dwarf_dealloc (library->d_debug, d_type_die, DW_DLA_DIE);
+    return result;
 }
 
 

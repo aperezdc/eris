@@ -27,4 +27,9 @@
 # endif /* ERIS_LIBDWARF_LIBDWARF_H */
 #endif /* ERIS_LIBDWARF_BUNDLED */
 
+#define DW_TYPE_TAG_NAMES(F) \
+    F (base_type)            \
+    F (typedef)              \
+    F (const_type)
+
 #endif /* !ERIS_LIBDWARF_H */

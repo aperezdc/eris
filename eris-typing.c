@@ -13,11 +13,17 @@
 
 
 struct _ErisTypeInfo {
-    char              *name;          /* Optional, may be NULL.  */
+    const char        *name;          /* Optional, may be NULL.  */
     ErisType           type;          /* ERIS_TYPE_XX type code. */
-    uint16_t           n_members;     /* Number of member items. */
-    unsigned           size     : 31; /* sizeof (type).          */
-    unsigned           readonly :  1; /* const?                  */
+    union {
+        /* Chained ErisTypeInfo for TYPEDEF, POINTER, CONST, and ARRAY. */
+        const ErisTypeInfo *typeinfo;
+        uint64_t       n_items;
+        struct {
+            uint32_t   n_members;     /* Number of member items. */
+            uint32_t   size;          /* sizeof (type). */
+        };
+    };
     ErisTypeInfoMember members[];     /* struct members.         */
 };
 
@@ -54,16 +60,48 @@ eris_type_size (ErisType type)
 
 
 ErisTypeInfo*
-eris_typeinfo_new (ErisType type, uint16_t n_members)
+eris_typeinfo_new_base_type (ErisType    type,
+                             const char *name)
 {
-    if (n_members > 0) CHECK (type == ERIS_TYPE_STRUCT);
+    CHECK_UINT_NE (ERIS_TYPE_NONE,    type);
+    CHECK_UINT_NE (ERIS_TYPE_VOID,    type);
+    CHECK_UINT_NE (ERIS_TYPE_POINTER, type);
+    CHECK_UINT_NE (ERIS_TYPE_TYPEDEF, type);
+    CHECK_UINT_NE (ERIS_TYPE_CONST,   type);
+    CHECK_UINT_NE (ERIS_TYPE_ARRAY,   type);
+    CHECK_UINT_NE (ERIS_TYPE_STRUCT,  type);
 
-    ErisTypeInfo *typeinfo = calloc (1,
-                                     sizeof (ErisTypeInfo) +
-                                     sizeof (ErisTypeInfoMember) * n_members);
-    typeinfo->n_members = n_members;
-    typeinfo->type = type;
+    ErisTypeInfo *typeinfo = calloc (1, sizeof (ErisTypeInfo));
+    typeinfo->name = name ? name : eris_type_name (type);
     typeinfo->size = eris_type_size (type);
+    typeinfo->type = type;
+    return typeinfo;
+}
+
+
+ErisTypeInfo*
+eris_typeinfo_new_const (const ErisTypeInfo *base)
+{
+    CHECK_NOT_NULL (base);
+
+    ErisTypeInfo *typeinfo = calloc (1, sizeof (ErisTypeInfo));
+    typeinfo->type     = ERIS_TYPE_CONST;
+    typeinfo->typeinfo = base;
+    return typeinfo;
+}
+
+
+ErisTypeInfo*
+eris_typeinfo_new_typedef (const ErisTypeInfo *base,
+                           const char         *name)
+{
+    CHECK_NOT_NULL (base);
+    CHECK_NOT_NULL (name);
+
+    ErisTypeInfo *typeinfo = calloc (1, sizeof (ErisTypeInfo));
+    typeinfo->type     = ERIS_TYPE_TYPEDEF;
+    typeinfo->typeinfo = base,
+    typeinfo->name     = name;
     return typeinfo;
 }
 
@@ -76,19 +114,45 @@ eris_typeinfo_is_valid (const ErisTypeInfo *typeinfo)
 
 
 bool
-eris_typeinfo_is_readonly (const ErisTypeInfo *typeinfo)
+eris_typeinfo_is_const (const ErisTypeInfo *typeinfo)
 {
     CHECK_NOT_NULL (typeinfo);
-    return typeinfo->readonly;
+
+    switch (typeinfo->type) {
+        case ERIS_TYPE_VOID: /* XXX */
+        case ERIS_TYPE_CONST:
+            return true;
+
+        case ERIS_TYPE_TYPEDEF:
+        case ERIS_TYPE_POINTER:
+        case ERIS_TYPE_ARRAY:
+            return eris_typeinfo_is_const (typeinfo->typeinfo);
+
+        default:
+            return false;
+    }
 }
 
 
-void
-eris_typeinfo_set_is_readonly (ErisTypeInfo *typeinfo,
-                               bool          readonly)
+bool
+eris_typeinfo_is_array (const ErisTypeInfo *typeinfo,
+                        uint64_t           *n_items)
 {
     CHECK_NOT_NULL (typeinfo);
-    typeinfo->readonly = readonly;
+
+    switch (typeinfo->type) {
+        case ERIS_TYPE_ARRAY:
+            if (n_items) *n_items = typeinfo->n_items;
+            return true;
+
+        case ERIS_TYPE_POINTER:
+        case ERIS_TYPE_TYPEDEF:
+        case ERIS_TYPE_CONST:
+            return eris_typeinfo_is_array (typeinfo->typeinfo, n_items);
+
+        default:
+            return false;
+    }
 }
 
 
@@ -96,18 +160,27 @@ const char*
 eris_typeinfo_name (const ErisTypeInfo *typeinfo)
 {
     CHECK_NOT_NULL (typeinfo);
-    return typeinfo->name;
-}
 
+    if (typeinfo->name) {
+        return typeinfo->name;
+    }
 
-void
-eris_typeinfo_set_name (ErisTypeInfo *typeinfo,
-                        const char   *name)
-{
-    CHECK_NOT_NULL (typeinfo);
-    if (typeinfo->name != name) {
-        free (typeinfo->name);
-        typeinfo->name = strdup (name);
+    CHECK_UINT_NE (ERIS_TYPE_TYPEDEF, typeinfo->type);
+
+    switch (typeinfo->type) {
+        case ERIS_TYPE_NONE:
+            return NULL;
+
+        case ERIS_TYPE_VOID:
+            return "void";
+
+        case ERIS_TYPE_CONST:
+        case ERIS_TYPE_ARRAY:
+        case ERIS_TYPE_POINTER:
+            return eris_typeinfo_name (typeinfo->typeinfo);
+
+        default:
+            return eris_type_name (typeinfo->type);
     }
 }
 
@@ -132,7 +205,43 @@ uint32_t
 eris_typeinfo_sizeof (const ErisTypeInfo *typeinfo)
 {
     CHECK (typeinfo);
-    return typeinfo->size;
+
+    switch (typeinfo->type) {
+        case ERIS_TYPE_VOID:
+            return 0;
+
+        case ERIS_TYPE_POINTER:
+            return sizeof (void*);
+
+        case ERIS_TYPE_TYPEDEF:
+        case ERIS_TYPE_CONST:
+            return eris_typeinfo_sizeof (typeinfo->typeinfo);
+
+        case ERIS_TYPE_ARRAY:
+            return eris_typeinfo_sizeof (typeinfo->typeinfo) * typeinfo->n_items;
+
+        default:
+            return typeinfo->size;
+
+    }
+}
+
+
+const ErisTypeInfo*
+eris_typeinfo_base (const ErisTypeInfo *typeinfo)
+{
+    CHECK_NOT_NULL (typeinfo);
+
+    switch (typeinfo->type) {
+        case ERIS_TYPE_CONST:
+        case ERIS_TYPE_ARRAY:
+        case ERIS_TYPE_TYPEDEF:
+        case ERIS_TYPE_POINTER:
+            return typeinfo->typeinfo;
+
+        default:
+            return NULL;
+    }
 }
 
 
