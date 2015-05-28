@@ -7,7 +7,7 @@ env:
         - COVERAGE=true
         - COVERAGE=false
 install:
-    - sudo apt-get install -y libelf-dev
+    - sudo apt-get install -y libelf-dev ninja-build
     - $COVERAGE && sudo pip install cpp-coveralls || true
 script:
     - $COVERAGE && export CC="${CC} -fprofile-arcs -ftest-coverage -O0 -g" || true
