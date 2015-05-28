@@ -1,21 +1,16 @@
 language: c
 compiler:
-    - clang
+    # - clang
     - gcc
 env:
     matrix:
         - COVERAGE=true
         - COVERAGE=false
 install:
-    - sudo update-alternatives --install /usr/bin/ld ld /usr/bin/ld.gold 10
-    - sudo update-alternatives --install /usr/bin/ld ld /usr/bin/ld.bfd  20
-    - sudo update-alternatives --set ld /usr/bin/ld.gold
     - sudo apt-get install -y libelf-dev
     - $COVERAGE && sudo pip install cpp-coveralls || true
 script:
     - $COVERAGE && export CC="${CC} -fprofile-arcs -ftest-coverage -O0 -g" || true
-    - ./configure --objdir=out --enable-checks --enable-bundled-lua --enable-bundled-libdwarf
-    - make V=1
-    - ./run-tests --verbose
+    - ./configure --objdir=out --enable-checks --enable-bundled-lua --enable-bundled-libdwarf && ninja && ./run-tests --verbose --output=tap
 after_success:
-    - $COVERAGE && coveralls --exclude lua --exclude lua-$LUA_VER --gcov-options '\-lp' || true
+    - $COVERAGE && coveralls --exclude out --exclude --gcov-options '\-lp' || true
