@@ -11,11 +11,10 @@ local libtest = require("eris").load("libtest")
 function check_variable (variable, expected_value)
 	assert.Not.Nil(variable)
 	assert.Not.Callable(variable)
-	assert.Field(variable, "get")
-	assert.Equal(expected_value, variable:get())
-	assert.Equal(libtest, variable:library())
-	variable:set(100)
-	assert.Equal(100, variable:get())
+	assert.Equal(expected_value, variable.__value)
+	assert.Equal(libtest, variable.__library)
+	variable[1] = 100
+	assert.Equal(100, variable.__value)
 end
 
 

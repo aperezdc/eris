@@ -16,6 +16,6 @@ libtest = nil
 collectgarbage()
 
 -- This should work and not crash.
-assert.Equal(42, variable:get())
+assert.Equal(42, variable.__value)
 variable = nil
 collectgarbage()

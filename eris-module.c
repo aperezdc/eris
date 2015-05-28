@@ -823,29 +823,27 @@ eris_variable_len (lua_State *L)
     return 1;
 }
 
-static int
-eris_variable_set (lua_State *L)
+static inline int
+eris_variable_set (lua_State    *L,
+                   ErisVariable *ev,
+                   lua_Integer   index)
 {
-    ErisVariable *ev = to_eris_variable (L);
+    CHECK_NOT_NULL (L);
+    CHECK_NOT_NULL (ev);
+
     if (eris_typeinfo_is_readonly (ev->typeinfo)) {
         return luaL_error (L, "read-only variable (%p:%s)",
                            ev->library, ev->name);
     }
+    if (index == 0) {
+        return luaL_error (L, "0 is not a valid index");
+    }
 
-    lua_Integer index = 1;
-    if (lua_gettop (L) == 3) {
-        index = luaL_checkinteger (L, 2);
-        if (index == 0) {
-            return luaL_error (L, "0 is not a valid index");
-        }
-        /* Adjust index, do bounds checking. */
-        if (index < 0) index += ev->n_items;
-        if (index <= 0 || index > ev->n_items) {
-            return luaL_error (L, "index %i out of bounds (effective=%i, length=%i)",
-                               luaL_checkinteger (L, 2), index, ev->n_items);
-        }
-    } else if (lua_gettop (L) != 2) {
-        return luaL_error (L, "wrong number of function arguments");
+    /* Adjust index, do bounds checking. */
+    if (index < 0) index += ev->n_items;
+    if (index <= 0 || index > ev->n_items) {
+        return luaL_error (L, "index %i out of bounds (effective=%i, length=%i)",
+                           luaL_checkinteger (L, 2), index, ev->n_items);
     }
 
     /* Convert from 1-based to 0-based indexing. */
@@ -871,15 +869,16 @@ eris_variable_set (lua_State *L)
 #undef SET_INTEGER
 #undef SET_FLOAT
 
-    lua_settop (L, 1);
     return 1;
 }
 
-static int
-eris_variable_get (lua_State *L)
+static inline int
+eris_variable_get (lua_State    *L,
+                   ErisVariable *ev,
+                   lua_Integer   index)
 {
-    ErisVariable *ev = to_eris_variable (L);
-    lua_Integer index = luaL_optinteger (L, 2, 1);
+    CHECK_NOT_NULL (L);
+    CHECK_NOT_NULL (ev);
 
     /* Adjust index, do bounds checking. */
     if (index < 0) index += ev->n_items;
@@ -913,38 +912,54 @@ eris_variable_get (lua_State *L)
 }
 
 static int
-eris_variable_name (lua_State *L)
+eris_variable_index (lua_State *L)
 {
     ErisVariable *ev = to_eris_variable (L);
-    lua_pushstring (L, ev->name);
-    return 1;
+    if (lua_isstring (L, 2)) {
+        const char *field = lua_tostring (L, 2);
+        if (field[0] == '_' && field[1] == '_') {
+            /* Handle Eris internal fields. */
+            if (!strcmp ("name", field + 2)) {
+                lua_pushstring (L, ev->name);
+            } else if (!strcmp ("type", field + 2)) {
+                eris_typeinfo_push_userdata (L, ev->typeinfo);
+            } else if (!strcmp ("library", field + 2)) {
+                eris_library_push_userdata (L, ev->library);
+            } else if (!strcmp ("value", field + 2)) {
+                return eris_variable_get (L, ev, 1);
+            } else {
+                return luaL_error (L, "invalid field '%s'", field);
+            }
+            return 1;
+        } else {
+            /* TODO: Implement struct named fields. */
+            if (eris_typeinfo_type (ev->typeinfo) != ERIS_TYPE_STRUCT) {
+                return luaL_error (L, "type '%s' is not a struct",
+                                   eris_typeinfo_name (ev->typeinfo));
+            }
+            return luaL_error (L, "struct fields are not implemented");
+        }
+    } else {
+        /* Handle index-based fields. */
+        return eris_variable_get (L, ev, luaL_checkinteger (L, 2));
+    }
 }
 
-static int
-eris_variable_type (lua_State *L)
-{
-    ErisVariable *ev = to_eris_variable (L);
-    eris_typeinfo_push_userdata (L, ev->typeinfo);
-    return 1;
-}
 
 static int
-eris_variable_library (lua_State *L)
+eris_variable_newindex (lua_State *L)
 {
     ErisVariable *ev = to_eris_variable (L);
-    eris_library_push_userdata (L, ev->library);
-    return 1;
+    lua_Integer index = luaL_checkinteger (L, 2);
+    return eris_variable_set (L, ev, index);
 }
 
 static const luaL_Reg eris_variable_methods[] = {
-    { "__gc",       eris_variable_gc        },
-    { "__tostring", eris_variable_tostring  },
-    { "__len",      eris_variable_len       },
-    { "get",        eris_variable_get       },
-    { "set",        eris_variable_set       },
-    { "name",       eris_variable_name      },
-    { "type",       eris_variable_type      },
-    { "library",    eris_variable_library   },
+    { "__gc",       eris_variable_gc       },
+    { "__tostring", eris_variable_tostring },
+    { "__len",      eris_variable_len      },
+    { "__index",    eris_variable_index    },
+    { "__newindex", eris_variable_newindex },
     { NULL, NULL },
 };
 
@@ -968,8 +983,6 @@ create_meta (lua_State *L)
 
     /* ErisVariable */
     luaL_newmetatable (L, ERIS_VARIABLE);
-    lua_pushvalue (L, -1);           /* Push metatable */
-    lua_setfield (L, -2, "__index"); /* metatable.__index == metatable */
     luaL_setfuncs (L, eris_variable_methods, 0);
     lua_pop (L, 1);
 

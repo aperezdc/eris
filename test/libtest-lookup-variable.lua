@@ -13,4 +13,4 @@ local intvar = libtest.intvar
 assert.Not.Nil(intvar)
 assert.Userdata(intvar, "org.perezdecastro.eris.Variable")
 assert.Not.Callable(intvar)
-assert.Equal(libtest, intvar:library())
+assert.Equal(libtest, intvar.__library)

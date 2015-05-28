@@ -11,10 +11,9 @@ local variable = libtest.const_int
 
 assert.Not.Nil(variable)
 assert.Not.Callable(variable)
-assert.Field(variable, "get")
-assert.Equal(42, variable:get())
-assert.Equal(libtest, variable:library())
+assert.Equal(42, variable.__value)
+assert.Equal(libtest, variable.__library)
 
 -- Read-only variables cannot be assigned to.
-assert.Error(function () variable:set(100) end)
-assert.Equal(42, variable:get())
+assert.Error(function () variable[1] = 100 end)
+assert.Equal(42, variable.__value)

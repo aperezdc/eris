@@ -12,18 +12,18 @@ for _, varname in ipairs { "var_flt", "var_dbl" } do
 	local variable = libtest[varname]
 	assert.Not.Nil(variable)
 	assert.Not.Callable(variable)
-	assert.Equal(1.0, variable:get())
-	assert.Equal(libtest, variable:library())
+	assert.Equal(1.0, variable.__value)
+	assert.Equal(libtest, variable.__library)
 
 	-- Set a floating point value.
-	variable:set(-42.5)
-	assert.Not.Equal(1.0, variable:get())
-	assert.Equal(-42.5, variable:get())
+	variable[1] = -42.5
+	assert.Not.Equal(1.0, variable.__value)
+	assert.Equal(-42.5, variable.__value)
 
 	-- Set an integral value (must work for floating point values).
-	variable:set(42)
-	assert.Not.Equal(1.0, variable:get())
-	assert.Not.Equal(-42.5, variable:get())
-	assert.Equal(42, variable:get())
+	variable[1] = 42
+	assert.Not.Equal(1.0, variable.__value)
+	assert.Not.Equal(-42.5, variable.__value)
+	assert.Equal(42, variable.__value)
 end
 

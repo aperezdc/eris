@@ -12,13 +12,12 @@ assert.Not.Nil(libtest)
 function check_variable(variable, expected_name, expected_readonly,
 	                   expected_type, expected_type_sizeof)
 	assert.Not.Nil(variable)
-	local type = variable:type()
-	assert.Equal(expected_name, variable:name())
-	assert.Equal(libtest, variable:library())
-	assert.Match(expected_type, type.name)
-	assert.Equal(expected_readonly, type.readonly)
+	assert.Equal(expected_name, variable.__name)
+	assert.Equal(libtest, variable.__library)
+	assert.Match(expected_type, variable.__type.name)
+	assert.Equal(expected_readonly, variable.__type.readonly)
 	if expected_type_sizeof ~= nil then
-		assert.Equal(expected_type_sizeof, type.sizeof)
+		assert.Equal(expected_type_sizeof, variable.__type.sizeof)
 	end
 end
 
