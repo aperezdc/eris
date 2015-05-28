@@ -5,11 +5,11 @@ cppflags = $CPPFLAGS
 ldflags  = -fPIC -Wl,-E -Wl,--as-needed $LDFLAGS
 
 rule urlfetch
-  command = wget -qO ${out} ${url}
+  command = curl -s -L -R -o '${out}' '${url}'
   description = urlfetch ${url}
 
 rule untargz
-  command = tar -xzf ${in} -C ${obj}
+  command = tar -xzf ${in} -C ${obj} && touch ${out}
   description = untargz ${in}
 
 rule staticlib
@@ -30,15 +30,22 @@ rule ld
 include lua-${lua_build}.ninja
 include libdwarf-${libdwarf_build}.ninja
 
-build ${obj}/eris-util.o : cc eris-util.c
-build ${obj}/eris-trace.o : cc eris-trace.c
+# Eris sources. The rules for building eris-module.o and eris.so are
+# are in the libdwarf-*.ninja files, because of their dependencies on
+# files of the (optioally) bundled libdwarf copy.
+#
+build ${obj}/eris-util.o   : cc eris-util.c
+build ${obj}/eris-trace.o  : cc eris-trace.c
 build ${obj}/eris-typing.o : cc eris-typing.c
-build ${obj}/eris-module.o : cc eris-module.c
 
+# Lua module: testutil.so
+#
 build ${obj}/testutil-module.o : cc testutil-module.c
 build ${obj}/testutil.so : ld ${obj}/testutil-module.o | ${lua_exe}
   ldflags = ${ldflags} -shared -Wl,--no-allow-shlib-undefined
 
+# Library used by the test suite.
+#
 build ${obj}/libtest.o  : cc libtest.c
 build ${obj}/libtest.so : ld ${obj}/libtest.o
   ldflags = ${ldflags} -shared

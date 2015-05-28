@@ -33,7 +33,7 @@ LDFLAGS += -fPIC -Wl,-E
 define RUN_FETCH_URL
 $P Fetch ${URL}
 $Q mkdir -p $(dir $@)
-$Q wget -qO $@ '${URL}'
+$Q curl -s -L -R -o '$@' '${URL}'
 endef
 
 define RUN_UNTARGZ

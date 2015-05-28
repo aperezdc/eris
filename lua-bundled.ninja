@@ -114,6 +114,7 @@ build ${lua_path}/src/lapi.c     $
       ${lua_path}/src/lutf8lib.c $
       ${lua_path}/src/lvm.c      $
       ${lua_path}/src/lzio.c     $
+      ${lua_path}/src/lua.c      $
       ${lua_path}/src/luac.c     $
     : untargz ${lua_tarball}
 

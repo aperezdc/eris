@@ -1,3 +1,5 @@
+build ${obj}/eris-module.o : cc eris-module.c
+
 build ${obj}/eris.so : ld  $
       ${obj}/eris-util.o   $
       ${obj}/eris-trace.o  $

@@ -3,8 +3,9 @@ LIBDWARF_TARBALL := ${OUT}/downloads/libdwarf-${LIBDWARF_VERSION}.tar.gz
 LIBDWARF_SRCPATH := ${OUT}/libdwarf-${LIBDWARF_VERSION}
 LIBDWARF         := ${LIBDWARF_SRCPATH}/libdwarf/libdwarf.a
 LIBDWARF_LDLIBS  := -lelf
-CPPFLAGS         += -I${LIBDWARF_SRCPATH}/libdwarf -DERIS_LIBDWARF_BUNDLED=1
-
+CPPFLAGS         += -I${LIBDWARF_SRCPATH}/libdwarf \
+                    -DERIS_WORKAROUND_DWARF_PUBTYPE_DIE_OFFSET=1 \
+                    -DERIS_LIBDWARF_BUNDLED=1
 
 ${LIBDWARF}: ${LIBDWARF_SRCPATH}/libdwarf/Makefile
 	$Q ${MAKE} -s -C $(dir $<)
@@ -29,6 +30,9 @@ ${LIBDWARF_TARBALL}: URL = https://github.com/Distrotech/libdwarf/archive/${LIBD
 ${LIBDWARF_TARBALL}:
 	${RUN_FETCH_URL}
 
+# A dependency on the libdwarf.h header is needed to force the bundled
+# libdwarf to be (at least) configured before building eris-module.o
+#
 ${OUT}/eris-module.o: ${LIBDWARF_SRCPATH}/libdwarf/libdwarf.h
 
 
