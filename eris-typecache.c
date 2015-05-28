@@ -47,7 +47,6 @@ eris_type_cache_lookup (ErisTypeCache *cache,
                         uint32_t       offset)
 {
     CHECK_NOT_NULL (cache);
-    CHECK_NOT_ZERO (offset);
 
     ErisTypeCacheEntry *entry;
     HASH_FIND_INT (*cache, &offset, entry);
@@ -61,7 +60,6 @@ eris_type_cache_add (ErisTypeCache      *cache,
                      const ErisTypeInfo *typeinfo)
 {
     CHECK_NOT_NULL (cache);
-    CHECK_NOT_ZERO (offset);
     CHECK_NOT_NULL (typeinfo);
 
     ErisTypeCacheEntry *entry = malloc (sizeof (ErisTypeCacheEntry));

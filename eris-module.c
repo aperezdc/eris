@@ -1102,7 +1102,7 @@ eris_type (lua_State *L)
 
     Dwarf_Error d_error = 0;
     Dwarf_Off d_offset = eris_library_get_tue_offset (el, name, &d_error);
-    if (!d_offset) {
+    if (d_offset == DW_DLV_BADOFFSET) {
         return luaL_error (L, "%s: could not look up DWARF TUE offset "
                            "(library: %p; %s)", name, el, dw_errmsg (d_error));
     }
@@ -1218,7 +1218,7 @@ eris_library_fetch_die (ErisLibrary *library,
                         Dwarf_Error *d_error)
 {
     CHECK_NOT_NULL (library);
-    CHECK_NOT_ZERO (d_offset);
+    CHECK_SIZE_NE (DW_DLV_BADOFFSET, d_offset);
     CHECK_NOT_NULL (d_error);
 
     Dwarf_Die d_die = 0;
@@ -1265,18 +1265,17 @@ eris_library_get_tue_offset (ErisLibrary *library,
         dwarf_dealloc (library->d_debug, type_name, DW_DLA_STRING);
 
         if (found) {
-            Dwarf_Off d_offset = 0;
+            Dwarf_Off d_offset;
             if (dwarf_pubtype_die_offset (library->d_types[i],
                                           &d_offset,
                                           d_error) != DW_DLV_OK) {
                 TRACE ("could not obtain TUE offset (%s)\n",
                        dw_errmsg (*d_error));
-                return 0;
+                d_offset = DW_DLV_BADOFFSET;
             }
-            CHECK_NOT_ZERO (d_offset);
             return d_offset;
         }
     }
 
-    return 0;
+    return DW_DLV_BADOFFSET;
 }
