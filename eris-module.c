@@ -133,8 +133,8 @@ l_eris_typeinfo_index (lua_State *L)
 
         lua_Integer index = luaL_checkinteger (L, 2);
         if (index < 1 || index > n_members) {
-            return luaL_error (L, "index %i out of bounds (length=%u)",
-                               index, (unsigned) n_members);
+            return luaL_error (L, "index %d out of bounds (length=%d)",
+                               index, (lua_Integer) n_members);
         }
 
         const ErisTypeInfoMember *member =
@@ -775,15 +775,22 @@ eris_variable_set (lua_State    *L,
         type = eris_typeinfo_type (typeinfo);
     }
 
+    uint64_t n_items = ev->n_items;
+    if (type == ERIS_TYPE_ARRAY) {
+        n_items  = eris_typeinfo_array_n_items (typeinfo);
+        typeinfo = eris_typeinfo_base (typeinfo);
+        type     = eris_typeinfo_type (typeinfo);
+    }
+
     if (index == 0) {
         return luaL_error (L, "0 is not a valid index");
     }
 
     /* Adjust index, do bounds checking. */
-    if (index < 0) index += ev->n_items;
-    if (index <= 0 || index > ev->n_items) {
-        return luaL_error (L, "index %i out of bounds (effective=%i, length=%i)",
-                           luaL_checkinteger (L, 2), index, ev->n_items);
+    if (index < 0) index += n_items;
+    if (index <= 0 || index > n_items) {
+        return luaL_error (L, "index %d out of bounds (effective=%d, length=%d)",
+                           luaL_checkinteger (L, 2), index, n_items);
     }
 
     /* Convert from 1-based to 0-based indexing. */
@@ -827,18 +834,17 @@ eris_variable_get (lua_State    *L,
         type = eris_typeinfo_type (typeinfo);
     }
 
-    void *address = ev->address;
     uint64_t n_items = ev->n_items;
     if (type == ERIS_TYPE_ARRAY) {
         n_items  = eris_typeinfo_array_n_items (typeinfo);
         typeinfo = eris_typeinfo_base (typeinfo);
-        address  = *((void**) address);
+        type     = eris_typeinfo_type (typeinfo);
     }
 
     /* Adjust index, do bounds checking. */
     if (index < 0) index += n_items;
     if (index <= 0 || index > n_items) {
-        return luaL_error (L, "index %i out of bounds (effective=%i, length=%i)",
+        return luaL_error (L, "index %d out of bounds (effective=%d, length=%d)",
                            luaL_checkinteger (L, 2), index, n_items);
     }
     /* Convert from 1-based to 0-based indexing. */
@@ -846,11 +852,11 @@ eris_variable_get (lua_State    *L,
 
 #define GET_INTEGER(suffix, ctype) \
         case ERIS_TYPE_ ## suffix: \
-            lua_pushinteger (L, ((ctype*) address)[index]); \
+            lua_pushinteger (L, ((ctype*) ev->address)[index]); \
             break;
 #define GET_FLOAT(suffix, ctype) \
         case ERIS_TYPE_ ## suffix: \
-            lua_pushnumber (L, ((ctype*) address)[index]); \
+            lua_pushnumber (L, ((ctype*) ev->address)[index]); \
             break;
 
     switch (type) {
@@ -870,33 +876,33 @@ static int
 eris_variable_index (lua_State *L)
 {
     ErisVariable *ev = to_eris_variable (L);
-    if (lua_isstring (L, 2)) {
-        const char *field = lua_tostring (L, 2);
-        if (field[0] == '_' && field[1] == '_') {
-            /* Handle Eris internal fields. */
-            if (!strcmp ("name", field + 2)) {
-                lua_pushstring (L, ev->name);
-            } else if (!strcmp ("type", field + 2)) {
-                eris_typeinfo_push_userdata (L, ev->typeinfo);
-            } else if (!strcmp ("library", field + 2)) {
-                eris_library_push_userdata (L, ev->library);
-            } else if (!strcmp ("value", field + 2)) {
-                return eris_variable_get (L, ev, 1);
-            } else {
-                return luaL_error (L, "invalid field '%s'", field);
-            }
-            return 1;
-        } else {
-            /* TODO: Implement struct named fields. */
-            if (eris_typeinfo_type (ev->typeinfo) != ERIS_TYPE_STRUCT) {
-                return luaL_error (L, "type '%s' is not a struct",
-                                   eris_typeinfo_name (ev->typeinfo));
-            }
-            return luaL_error (L, "struct fields are not implemented");
-        }
-    } else {
+    if (lua_isinteger (L, 2)) {
         /* Handle index-based fields. */
         return eris_variable_get (L, ev, luaL_checkinteger (L, 2));
+    }
+
+    const char *field = lua_tostring (L, 2);
+    if (field[0] == '_' && field[1] == '_') {
+        /* Handle Eris internal fields. */
+        if (!strcmp ("name", field + 2)) {
+            lua_pushstring (L, ev->name);
+        } else if (!strcmp ("type", field + 2)) {
+            eris_typeinfo_push_userdata (L, ev->typeinfo);
+        } else if (!strcmp ("library", field + 2)) {
+            eris_library_push_userdata (L, ev->library);
+        } else if (!strcmp ("value", field + 2)) {
+            return eris_variable_get (L, ev, 1);
+        } else {
+            return luaL_error (L, "invalid field '%s'", field);
+        }
+        return 1;
+    } else {
+        /* TODO: Implement struct named fields. */
+        if (eris_typeinfo_type (ev->typeinfo) != ERIS_TYPE_STRUCT) {
+            return luaL_error (L, "type '%s' is not a struct",
+                               eris_typeinfo_name (ev->typeinfo));
+        }
+        return luaL_error (L, "struct fields are not implemented");
     }
 }
 
