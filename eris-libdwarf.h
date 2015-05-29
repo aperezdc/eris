@@ -30,6 +30,7 @@
 #define DW_TYPE_TAG_NAMES(F) \
     F (base_type)            \
     F (typedef)              \
-    F (const_type)
+    F (const_type)           \
+    F (array_type)
 
 #endif /* !ERIS_LIBDWARF_H */

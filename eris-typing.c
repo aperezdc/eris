@@ -11,20 +11,42 @@
 #include <stdlib.h>
 #include <string.h>
 
+struct TI_base {
+    const char         *name;
+    uint32_t            size;
+};
+struct TI_pointer {
+    const ErisTypeInfo *typeinfo;
+};
+struct TI_typedef {
+    const char         *name;
+    const ErisTypeInfo *typeinfo;
+};
+struct TI_const {
+    const ErisTypeInfo *typeinfo;
+};
+struct TI_array {
+    const ErisTypeInfo *typeinfo;
+    uint64_t            n_items;
+};
+struct TI_struct {
+    const char         *name;
+    uint32_t            size;
+    uint32_t            n_members;
+    ErisTypeInfoMember  members[];
+};
+
 
 struct _ErisTypeInfo {
-    const char        *name;          /* Optional, may be NULL.  */
-    ErisType           type;          /* ERIS_TYPE_XX type code. */
+    ErisType type;
     union {
-        /* Chained ErisTypeInfo for TYPEDEF, POINTER, CONST, and ARRAY. */
-        const ErisTypeInfo *typeinfo;
-        uint64_t       n_items;
-        struct {
-            uint32_t   n_members;     /* Number of member items. */
-            uint32_t   size;          /* sizeof (type). */
-        };
+        struct TI_base    ti_base;
+        struct TI_pointer ti_pointer;
+        struct TI_typedef ti_typedef;
+        struct TI_const   ti_const;
+        struct TI_array   ti_array;
+        struct TI_struct  ti_struct;
     };
-    ErisTypeInfoMember members[];     /* struct members.         */
 };
 
 
@@ -59,7 +81,18 @@ eris_type_size (ErisType type)
 }
 
 
-ErisTypeInfo*
+static inline ErisTypeInfo*
+eris_typeinfo_new (ErisType type, uint32_t n_members)
+{
+    ErisTypeInfo* typeinfo = calloc (1,
+                                     sizeof (ErisTypeInfo) +
+                                     sizeof (ErisTypeInfoMember) * n_members);
+    typeinfo->type = type;
+    return typeinfo;
+}
+
+
+const ErisTypeInfo*
 eris_typeinfo_new_base_type (ErisType    type,
                              const char *name)
 {
@@ -71,37 +104,47 @@ eris_typeinfo_new_base_type (ErisType    type,
     CHECK_UINT_NE (ERIS_TYPE_ARRAY,   type);
     CHECK_UINT_NE (ERIS_TYPE_STRUCT,  type);
 
-    ErisTypeInfo *typeinfo = calloc (1, sizeof (ErisTypeInfo));
-    typeinfo->name = name ? name : eris_type_name (type);
-    typeinfo->size = eris_type_size (type);
-    typeinfo->type = type;
+    ErisTypeInfo *typeinfo = eris_typeinfo_new (type, 0);
+    typeinfo->ti_base.name = name ? name : eris_type_name (type);
+    typeinfo->ti_base.size = eris_type_size (type);
     return typeinfo;
 }
 
 
-ErisTypeInfo*
+const ErisTypeInfo*
 eris_typeinfo_new_const (const ErisTypeInfo *base)
 {
     CHECK_NOT_NULL (base);
 
-    ErisTypeInfo *typeinfo = calloc (1, sizeof (ErisTypeInfo));
-    typeinfo->type     = ERIS_TYPE_CONST;
-    typeinfo->typeinfo = base;
+    ErisTypeInfo *typeinfo = eris_typeinfo_new (ERIS_TYPE_CONST, 0);
+    typeinfo->ti_const.typeinfo = base;
     return typeinfo;
 }
 
 
-ErisTypeInfo*
+const ErisTypeInfo*
 eris_typeinfo_new_typedef (const ErisTypeInfo *base,
                            const char         *name)
 {
     CHECK_NOT_NULL (base);
     CHECK_NOT_NULL (name);
 
-    ErisTypeInfo *typeinfo = calloc (1, sizeof (ErisTypeInfo));
-    typeinfo->type     = ERIS_TYPE_TYPEDEF;
-    typeinfo->typeinfo = base,
-    typeinfo->name     = name;
+    ErisTypeInfo *typeinfo = eris_typeinfo_new (ERIS_TYPE_TYPEDEF, 0);
+    typeinfo->ti_typedef.typeinfo = base,
+    typeinfo->ti_typedef.name     = name;
+    return typeinfo;
+}
+
+
+const ErisTypeInfo*
+eris_typeinfo_new_array_type (const ErisTypeInfo *base,
+                              uint64_t            n_items)
+{
+    CHECK_NOT_NULL (base);
+
+    ErisTypeInfo *typeinfo = eris_typeinfo_new (ERIS_TYPE_ARRAY, 0);
+    typeinfo->ti_array.typeinfo = base;
+    typeinfo->ti_array.n_items  = n_items;
     return typeinfo;
 }
 
@@ -124,9 +167,11 @@ eris_typeinfo_is_const (const ErisTypeInfo *typeinfo)
             return true;
 
         case ERIS_TYPE_TYPEDEF:
+            return eris_typeinfo_is_const (typeinfo->ti_typedef.typeinfo);
         case ERIS_TYPE_POINTER:
+            return eris_typeinfo_is_const (typeinfo->ti_pointer.typeinfo);
         case ERIS_TYPE_ARRAY:
-            return eris_typeinfo_is_const (typeinfo->typeinfo);
+            return eris_typeinfo_is_const (typeinfo->ti_array.typeinfo);
 
         default:
             return false;
@@ -142,13 +187,47 @@ eris_typeinfo_is_array (const ErisTypeInfo *typeinfo,
 
     switch (typeinfo->type) {
         case ERIS_TYPE_ARRAY:
-            if (n_items) *n_items = typeinfo->n_items;
+            if (n_items) *n_items = typeinfo->ti_array.n_items;
             return true;
 
         case ERIS_TYPE_POINTER:
+            return eris_typeinfo_is_array (typeinfo->ti_pointer.typeinfo,
+                                           n_items);
         case ERIS_TYPE_TYPEDEF:
+            return eris_typeinfo_is_array (typeinfo->ti_typedef.typeinfo,
+                                           n_items);
         case ERIS_TYPE_CONST:
-            return eris_typeinfo_is_array (typeinfo->typeinfo, n_items);
+            return eris_typeinfo_is_array (typeinfo->ti_const.typeinfo,
+                                           n_items);
+
+        default:
+            return false;
+    }
+}
+
+
+bool
+eris_typeinfo_is_struct (const ErisTypeInfo *typeinfo,
+                         uint32_t           *n_members)
+{
+    CHECK_NOT_NULL (typeinfo);
+
+    switch (typeinfo->type) {
+        case ERIS_TYPE_STRUCT:
+            if (n_members) *n_members = typeinfo->ti_struct.n_members;
+            return true;
+
+        case ERIS_TYPE_POINTER:
+            return eris_typeinfo_is_struct (typeinfo->ti_pointer.typeinfo,
+                                            n_members);
+
+        case ERIS_TYPE_TYPEDEF:
+            return eris_typeinfo_is_struct (typeinfo->ti_typedef.typeinfo,
+                                            n_members);
+
+        case ERIS_TYPE_CONST:
+            return eris_typeinfo_is_struct (typeinfo->ti_typedef.typeinfo,
+                                            n_members);
 
         default:
             return false;
@@ -161,26 +240,25 @@ eris_typeinfo_name (const ErisTypeInfo *typeinfo)
 {
     CHECK_NOT_NULL (typeinfo);
 
-    if (typeinfo->name) {
-        return typeinfo->name;
-    }
-
-    CHECK_UINT_NE (ERIS_TYPE_TYPEDEF, typeinfo->type);
-
     switch (typeinfo->type) {
         case ERIS_TYPE_NONE:
             return NULL;
-
         case ERIS_TYPE_VOID:
             return "void";
-
-        case ERIS_TYPE_CONST:
-        case ERIS_TYPE_ARRAY:
+        case ERIS_TYPE_STRUCT:
+            return typeinfo->ti_struct.name;
         case ERIS_TYPE_POINTER:
-            return eris_typeinfo_name (typeinfo->typeinfo);
-
+            return eris_typeinfo_name (typeinfo->ti_pointer.typeinfo);
+        case ERIS_TYPE_TYPEDEF:
+            return typeinfo->ti_typedef.name
+                 ? typeinfo->ti_typedef.name
+                 : eris_typeinfo_name (typeinfo->ti_typedef.typeinfo);
+        case ERIS_TYPE_CONST:
+            return eris_typeinfo_name (typeinfo->ti_const.typeinfo);
+        case ERIS_TYPE_ARRAY:
+            return eris_typeinfo_name (typeinfo->ti_array.typeinfo);
         default:
-            return eris_type_name (typeinfo->type);
+            return typeinfo->ti_base.name;
     }
 }
 
@@ -193,11 +271,23 @@ eris_typeinfo_type (const ErisTypeInfo *typeinfo)
 }
 
 
-uint16_t
-eris_typeinfo_n_members (const ErisTypeInfo *typeinfo)
+uint32_t
+eris_typeinfo_struct_n_members (const ErisTypeInfo *typeinfo)
 {
-    CHECK (typeinfo);
-    return typeinfo->n_members;
+    CHECK_NOT_NULL (typeinfo);
+    CHECK_UINT_EQ (ERIS_TYPE_STRUCT, typeinfo->type);
+
+    return typeinfo->ti_struct.n_members;
+}
+
+
+uint64_t
+eris_typeinfo_array_n_items (const ErisTypeInfo *typeinfo)
+{
+    CHECK_NOT_NULL (typeinfo);
+    CHECK_UINT_EQ (ERIS_TYPE_ARRAY, typeinfo->type);
+
+    return typeinfo->ti_array.n_items;
 }
 
 
@@ -205,24 +295,24 @@ uint32_t
 eris_typeinfo_sizeof (const ErisTypeInfo *typeinfo)
 {
     CHECK (typeinfo);
+    CHECK_UINT_NE (ERIS_TYPE_NONE, typeinfo->type);
 
     switch (typeinfo->type) {
         case ERIS_TYPE_VOID:
             return 0;
-
         case ERIS_TYPE_POINTER:
             return sizeof (void*);
-
         case ERIS_TYPE_TYPEDEF:
+            return eris_typeinfo_sizeof (typeinfo->ti_typedef.typeinfo);
         case ERIS_TYPE_CONST:
-            return eris_typeinfo_sizeof (typeinfo->typeinfo);
-
+            return eris_typeinfo_sizeof (typeinfo->ti_const.typeinfo);
         case ERIS_TYPE_ARRAY:
-            return eris_typeinfo_sizeof (typeinfo->typeinfo) * typeinfo->n_items;
-
+            return eris_typeinfo_sizeof (typeinfo->ti_array.typeinfo) *
+                   typeinfo->ti_array.n_items;
+        case ERIS_TYPE_STRUCT:
+            return typeinfo->ti_struct.size;
         default:
-            return typeinfo->size;
-
+            return typeinfo->ti_base.size;
     }
 }
 
@@ -233,15 +323,24 @@ eris_typeinfo_base (const ErisTypeInfo *typeinfo)
     CHECK_NOT_NULL (typeinfo);
 
     switch (typeinfo->type) {
-        case ERIS_TYPE_CONST:
-        case ERIS_TYPE_ARRAY:
-        case ERIS_TYPE_TYPEDEF:
         case ERIS_TYPE_POINTER:
-            return typeinfo->typeinfo;
-
+            return typeinfo->ti_pointer.typeinfo;
+        case ERIS_TYPE_TYPEDEF:
+            return typeinfo->ti_typedef.typeinfo;
+        case ERIS_TYPE_CONST:
+            return typeinfo->ti_const.typeinfo;
+        case ERIS_TYPE_ARRAY:
+            return typeinfo->ti_array.typeinfo;
         default:
             return NULL;
     }
+}
+
+
+static inline bool
+string_eq (const char *a, const char *b)
+{
+    return (a == b) || (a && b && strcmp (a, b) == 0);
 }
 
 
@@ -255,148 +354,100 @@ eris_typeinfo_equal (const ErisTypeInfo *a,
     if (a == b)
         return true;
 
-    if (a->type != b->type || a->size != b->size || a->n_members != b->n_members)
+    if (a->type != b->type)
         return false;
 
-    /* Check members. */
-    for (uint16_t i = 0; i < a->n_members; i++) {
-        const ErisTypeInfoMember *b_member =
-                eris_typeinfo_const_named_member (b, a->members[i].name);
-        if (!b_member || !eris_typeinfo_equal (a->members[i].typeinfo,
-                                               b_member->typeinfo))
-            return false;
+    switch (a->type) {
+        case ERIS_TYPE_POINTER:
+            return eris_typeinfo_equal (a->ti_pointer.typeinfo,
+                                        b->ti_pointer.typeinfo);
+
+        case ERIS_TYPE_TYPEDEF:
+            return string_eq (a->ti_typedef.name, b->ti_typedef.name)
+                && eris_typeinfo_equal (a->ti_typedef.typeinfo,
+                                        b->ti_typedef.typeinfo);
+
+        case ERIS_TYPE_CONST:
+            return eris_typeinfo_equal (a->ti_typedef.typeinfo,
+                                        b->ti_typedef.typeinfo);
+
+        case ERIS_TYPE_ARRAY:
+            return a->ti_array.n_items == b->ti_array.n_items
+                && eris_typeinfo_equal (a->ti_array.typeinfo,
+                                        b->ti_array.typeinfo);
+
+        case ERIS_TYPE_STRUCT:
+            if (a->ti_struct.size != b->ti_struct.size ||
+                a->ti_struct.n_members != b->ti_struct.n_members ||
+                !string_eq (a->ti_struct.name, b->ti_struct.name)) {
+                    return false;
+            }
+            /* Check struct members. */
+            for (uint32_t i = 0; i < a->ti_struct.n_members; i++) {
+                if (!string_eq (a->ti_struct.members[i].name,
+                                b->ti_struct.members[i].name) ||
+                    !eris_typeinfo_equal (a->ti_struct.members[i].typeinfo,
+                                          b->ti_struct.members[i].typeinfo))
+                        return false;
+            }
+            return true;
+
+        default:
+            return a->ti_base.size == b->ti_base.size
+                && string_eq (a->ti_base.name, b->ti_base.name);
     }
-    return true;
 }
 
 
 const ErisTypeInfoMember*
-eris_typeinfo_const_named_member (const ErisTypeInfo *typeinfo,
-                                  const char         *name)
+eris_typeinfo_struct_const_named_member (const ErisTypeInfo *typeinfo,
+                                         const char         *name)
 {
     CHECK_NOT_NULL (typeinfo);
+    CHECK_UINT_EQ (ERIS_TYPE_STRUCT, typeinfo->type);
     CHECK_NOT_NULL (name);
 
-    if (typeinfo->type == ERIS_TYPE_STRUCT) {
-        for (uint16_t i = 0; i < typeinfo->n_members; i++)
-            if (!strcmp (name, typeinfo->members[i].name))
-                return &typeinfo->members[i];
-    }
+    for (uint32_t i = 0; i < typeinfo->ti_struct.n_members; i++)
+        if (string_eq (name, typeinfo->ti_struct.members[i].name))
+            return &typeinfo->ti_struct.members[i];
     return NULL;
 }
 
 
 ErisTypeInfoMember*
-eris_typeinfo_named_member (ErisTypeInfo *typeinfo,
-                            const char   *name)
+eris_typeinfo_struct_named_member (ErisTypeInfo *typeinfo,
+                                   const char   *name)
 {
     CHECK_NOT_NULL (typeinfo);
+    CHECK_UINT_EQ (ERIS_TYPE_STRUCT, typeinfo->type);
     CHECK_NOT_NULL (name);
 
-    if (typeinfo->type == ERIS_TYPE_STRUCT) {
-        for (uint16_t i = 0; i < typeinfo->n_members; i++)
-            if (!strcasecmp (name, typeinfo->members[i].name))
-                return &typeinfo->members[i];
-    }
+    for (uint32_t i = 0; i < typeinfo->ti_struct.n_members; i++)
+        if (string_eq (name, typeinfo->ti_struct.members[i].name))
+            return &typeinfo->ti_struct.members[i];
     return NULL;
 }
 
 
 const ErisTypeInfoMember*
-eris_typeinfo_const_member (const ErisTypeInfo *typeinfo,
-                            uint16_t            index)
+eris_typeinfo_struct_const_member (const ErisTypeInfo *typeinfo,
+                                   uint32_t            index)
 {
     CHECK_NOT_NULL (typeinfo);
-    CHECK_U16_LT (typeinfo->n_members, index);
-    return &typeinfo->members[index];
+    CHECK_UINT_EQ (ERIS_TYPE_STRUCT, typeinfo->type);
+    CHECK_U32_LT (typeinfo->ti_struct.n_members, index);
+
+    return &typeinfo->ti_struct.members[index];
 }
 
 
 ErisTypeInfoMember*
-eris_typeinfo_member (ErisTypeInfo *typeinfo,
-                      uint16_t      index)
+eris_typeinfo_struct_member (ErisTypeInfo *typeinfo,
+                             uint32_t      index)
 {
     CHECK_NOT_NULL (typeinfo);
-    CHECK_U16_LT (typeinfo->n_members, index);
-    return &typeinfo->members[index];
+    CHECK_UINT_EQ (ERIS_TYPE_STRUCT, typeinfo->type);
+    CHECK_U32_LT (typeinfo->ti_struct.n_members, index);
+
+    return &typeinfo->ti_struct.members[index];
 }
-
-
-#if 0
-/*
- * TODO: Depending on the size of lua_Integer and lua_Number, it may not be
- *       possible to always represent 64-bit numbers. In that case, the 64-bit
- *       types should be left out at compile-time, or wrapped into userdata.
- */
-
-#define MAKE_INTEGER_GETTER_AND_SETTER(suffix, ctype)        \
-    static int eris_variable_get__ ## ctype (lua_State *L) { \
-        ErisVariable *ev = to_eris_variable (L);             \
-        lua_pushinteger (L, *((ctype *) ev->address));       \
-        return 1;                                            \
-    }                                                        \
-    static int eris_variable_set__ ## ctype (lua_State *L) { \
-        ErisVariable *ev = to_eris_variable (L);             \
-        *((ctype *) ev->address) =                           \
-            (ctype) luaL_checkinteger (L, 2);                \
-        return 0;                                            \
-    }
-
-#define MAKE_FLOAT_GETTER_AND_SETTER(suffix, ctype)          \
-    static int eris_variable_get__ ## ctype (lua_State *L) { \
-        ErisVariable *ev = to_eris_variable (L);             \
-        lua_pushnumber (L, *((ctype *) ev->address));        \
-        return 1;                                            \
-    }                                                        \
-    static int eris_variable_set__ ## ctype (lua_State *L) { \
-        ErisVariable *ev = to_eris_variable (L);             \
-        *((ctype *) ev->address) =                           \
-            (ctype) luaL_checknumber (L, 2);                 \
-        return 0;                                            \
-    }
-
-INTEGER_TYPES (MAKE_INTEGER_GETTER_AND_SETTER)
-FLOAT_TYPES (MAKE_FLOAT_GETTER_AND_SETTER)
-
-#undef MAKE_INTEGER_GETTER_AND_SETTER
-#undef MAKE_FLOAT_GETTER_AND_SETTER
-
-
-static const ErisConverter builtin_converters[] = {
-#define INTEGER_GETTER_SETTER_ITEM(suffix, ctype) { \
-    .getter         = eris_variable_get__ ## ctype, \
-    .setter         = eris_variable_set__ ## ctype, \
-    .typeinfo.name  = #ctype,                       \
-    .typeinfo.type  = ERIS_TYPE_ ## suffix,         \
-    .typeinfo.size  = sizeof (ctype) },
-
-#define FLOAT_GETTER_SETTER_ITEM(suffix, ctype) {   \
-    .getter         = eris_variable_get__ ## ctype, \
-    .setter         = eris_variable_set__ ## ctype, \
-    .typeinfo.name  = #ctype,                       \
-    .typeinfo.type  = ERIS_TYPE_ ## suffix,         \
-    .typeinfo.size  = sizeof (ctype) },
-
-    INTEGER_TYPES (INTEGER_GETTER_SETTER_ITEM)
-    FLOAT_TYPES (FLOAT_GETTER_SETTER_ITEM)
-
-#undef INTEGER_GETTER_SETTER_ITEM
-#undef FLOAT_GETTER_SETTER_ITEM
-    { 0, }
-};
-
-
-const ErisConverter*
-eris_converter_for_typeinfo (const ErisTypeInfo *typeinfo)
-{
-    /*
-     * XXX: Using LENGTH_OF() does not work because of the variable
-     *      length array member of ErisTypeInfo.
-     */
-    for (size_t i = 0; builtin_converters[i].getter; i++) {
-        if (eris_typeinfo_equal (typeinfo, &builtin_converters[i].typeinfo))
-            return &builtin_converters[i];
-    }
-    return NULL;
-}
-#endif

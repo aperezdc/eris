@@ -10,6 +10,7 @@
 /* Simple integer variable, and a pointer to it. */
 int intvar = 42;
 int *intptrvar = &intvar;
+int intarray[] = { 1, 2, 3, 4, 5 };
 
 /* Standard C99 integral typedefs. */
 int8_t   var_i8  =  -8;

@@ -125,11 +125,20 @@ l_eris_typeinfo_index (lua_State *L)
         }
         return 1;
     } else {
+        uint32_t n_members = 0;
+        if (!eris_typeinfo_is_struct (typeinfo, &n_members)) {
+            return luaL_error (L, "type '%s' is not a struct",
+                               eris_typeinfo_name (typeinfo));
+        }
+
         lua_Integer index = luaL_checkinteger (L, 2);
-        if (index < 1)
-            return luaL_error (L, "invalid index: %i", index);
+        if (index < 1 || index > n_members) {
+            return luaL_error (L, "index %i out of bounds (length=%u)",
+                               index, (unsigned) n_members);
+        }
+
         const ErisTypeInfoMember *member =
-                eris_typeinfo_const_member (typeinfo, index);
+                eris_typeinfo_struct_const_member (typeinfo, index);
         lua_pushstring (L, member->name);
         eris_typeinfo_push_userdata (L, member->typeinfo);
         lua_pushinteger (L, member->offset);
@@ -141,7 +150,13 @@ static int
 l_eris_typeinfo_len (lua_State *L)
 {
     const ErisTypeInfo *typeinfo = to_eris_typeinfo (L, 1);
-    lua_pushinteger (L, eris_typeinfo_n_members (typeinfo));
+
+    uint32_t n_members = 0;
+    if (!eris_typeinfo_is_struct (typeinfo, &n_members)) {
+        return luaL_error (L, "type '%s' is not a struct",
+                           eris_typeinfo_name (typeinfo));
+    }
+    lua_pushinteger (L, n_members);
     return 1;
 }
 
@@ -722,7 +737,21 @@ static int
 eris_variable_len (lua_State *L)
 {
     ErisVariable *ev = to_eris_variable (L);
-    lua_pushinteger (L, ev->n_items);
+
+    const ErisTypeInfo *typeinfo = ev->typeinfo;
+    ErisType type = eris_typeinfo_type (typeinfo);
+    while (type == ERIS_TYPE_TYPEDEF || type == ERIS_TYPE_CONST) {
+        typeinfo = eris_typeinfo_base (typeinfo);
+        type = eris_typeinfo_type (typeinfo);
+    }
+
+    uint64_t n_items = ev->n_items;
+    if (type == ERIS_TYPE_ARRAY) {
+        n_items  = eris_typeinfo_array_n_items (typeinfo);
+        typeinfo = eris_typeinfo_base (typeinfo);
+    }
+
+    lua_pushinteger (L, n_items);
     return 1;
 }
 
@@ -798,22 +827,30 @@ eris_variable_get (lua_State    *L,
         type = eris_typeinfo_type (typeinfo);
     }
 
+    void *address = ev->address;
+    uint64_t n_items = ev->n_items;
+    if (type == ERIS_TYPE_ARRAY) {
+        n_items  = eris_typeinfo_array_n_items (typeinfo);
+        typeinfo = eris_typeinfo_base (typeinfo);
+        address  = *((void**) address);
+    }
+
     /* Adjust index, do bounds checking. */
-    if (index < 0) index += ev->n_items;
-    if (index <= 0 || index > ev->n_items) {
+    if (index < 0) index += n_items;
+    if (index <= 0 || index > n_items) {
         return luaL_error (L, "index %i out of bounds (effective=%i, length=%i)",
-                           luaL_checkinteger (L, 2), index, ev->n_items);
+                           luaL_checkinteger (L, 2), index, n_items);
     }
     /* Convert from 1-based to 0-based indexing. */
     index--;
 
 #define GET_INTEGER(suffix, ctype) \
         case ERIS_TYPE_ ## suffix: \
-            lua_pushinteger (L, ((ctype*) ev->address)[index]); \
+            lua_pushinteger (L, ((ctype*) address)[index]); \
             break;
 #define GET_FLOAT(suffix, ctype) \
         case ERIS_TYPE_ ## suffix: \
-            lua_pushnumber (L, ((ctype*) ev->address)[index]); \
+            lua_pushnumber (L, ((ctype*) address)[index]); \
             break;
 
     switch (type) {
@@ -871,6 +908,7 @@ eris_variable_newindex (lua_State *L)
     lua_Integer index = luaL_checkinteger (L, 2);
     return eris_variable_set (L, ev, index);
 }
+
 
 static const luaL_Reg eris_variable_methods[] = {
     { "__gc",       eris_variable_gc       },
@@ -1283,6 +1321,93 @@ eris_library_build_typedef_typeinfo (ErisLibrary *library,
 }
 
 
+static bool
+get_array_n_items (ErisLibrary *library,
+                   Dwarf_Die     d_type_die,
+                   uint64_t     *n_items,
+                   Dwarf_Error  *d_error)
+{
+    CHECK_NOT_NULL (library);
+    CHECK_NOT_NULL (d_type_die);
+    CHECK_NOT_NULL (n_items);
+    CHECK_NOT_NULL (d_error);
+
+    *n_items = UINT64_MAX;
+
+    Dwarf_Die d_child_die = NULL;
+    if (dwarf_child (d_type_die, &d_child_die, d_error) != DW_DLV_OK)
+        return false;
+
+    bool result = false;
+    for (;;) {
+        Dwarf_Half d_tag;
+        if (dwarf_tag (d_child_die, &d_tag, d_error) != DW_DLV_OK)
+            break;
+
+        if (d_tag == DW_TAG_subrange_type) {
+            Dwarf_Unsigned d_count = 0;
+            if (die_get_uint_attribute (library,
+                                        d_child_die,
+                                        DW_AT_count,
+                                        &d_count,
+                                        d_error)) {
+                *n_items = (uint64_t) d_count;
+                result = true;
+            }
+            break;
+        }
+
+        Dwarf_Die d_next_child_die;
+        if (dwarf_siblingof (library->d_debug,
+                             d_child_die,
+                             &d_next_child_die,
+                             d_error) == DW_DLV_OK) {
+            dwarf_dealloc (library->d_debug, d_child_die, DW_DLA_DIE);
+            d_child_die = d_next_child_die;
+        }
+    }
+
+    dwarf_dealloc (library->d_debug, d_child_die, DW_DLA_DIE);
+    return result;
+}
+
+
+static const ErisTypeInfo*
+eris_library_build_array_type_typeinfo (ErisLibrary *library,
+                                        Dwarf_Die    d_type_die,
+                                        Dwarf_Error *d_error)
+{
+    CHECK_NOT_NULL (library);
+    CHECK_NOT_NULL (d_type_die);
+    CHECK_NOT_NULL (d_error);
+
+    uint64_t n_items;
+    if (!get_array_n_items (library, d_type_die, &n_items, d_error))
+        return NULL;
+
+    Dwarf_Off d_offset =
+            eris_library_get_die_ref_attribute_offset (library,
+                                                       d_type_die,
+                                                       DW_AT_type,
+                                                       d_error);
+    if (d_offset == DW_DLV_BADOFFSET) {
+        TRACE ("cannot get TUE offset (%s)\n", dw_errmsg (*d_error));
+        return NULL;
+    }
+
+    const ErisTypeInfo *base =
+            eris_library_lookup_type (library, d_offset, d_error);
+    if (!base) {
+        TRACE ("cannot get TUE (%s)\n", dw_errmsg (*d_error));
+        return NULL;
+    }
+
+    TRACE ("new typeinfo: %s[%" PRIu64 "]\n",
+           eris_typeinfo_name (base), n_items);
+    return eris_typeinfo_new_array_type (base, n_items);
+}
+
+
 static const ErisTypeInfo*
 eris_library_build_const_type_typeinfo (ErisLibrary *library,
                                         Dwarf_Die    d_type_die,
@@ -1311,7 +1436,6 @@ eris_library_build_const_type_typeinfo (ErisLibrary *library,
 
     return eris_typeinfo_new_const (base);
 }
-
 
 
 static const ErisTypeInfo*
