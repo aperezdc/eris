@@ -32,7 +32,7 @@
     do {                                                    \
         type eval_expect = (expect);                        \
         type eval_expr = (expr);                            \
-        if (!(eval_expect op eval_expr))                    \
+        if (!(eval_expr op eval_expect))                    \
             CHECK_FAILED ("expression: %s\n"                \
                           "expected: " #op " %" fmt "\n"    \
                           "value: %" fmt "\n",              \
