@@ -31,6 +31,7 @@
     F (base_type)            \
     F (typedef)              \
     F (const_type)           \
-    F (array_type)
+    F (array_type)           \
+    F (structure_type)
 
 #endif /* !ERIS_LIBDWARF_H */

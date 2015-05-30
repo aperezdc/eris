@@ -149,6 +149,19 @@ eris_typeinfo_new_array_type (const ErisTypeInfo *base,
 }
 
 
+ErisTypeInfo*
+eris_typeinfo_new_struct (const char *name,
+                          uint32_t    size,
+                          uint32_t    n_members)
+{
+    ErisTypeInfo *typeinfo = eris_typeinfo_new (ERIS_TYPE_STRUCT, n_members);
+    typeinfo->ti_struct.name      = name ? name : "<struct>";
+    typeinfo->ti_struct.size      = size;
+    typeinfo->ti_struct.n_members = n_members;
+    return typeinfo;
+}
+
+
 bool
 eris_typeinfo_is_valid (const ErisTypeInfo *typeinfo)
 {
@@ -419,13 +432,10 @@ eris_typeinfo_struct_named_member (ErisTypeInfo *typeinfo,
                                    const char   *name)
 {
     CHECK_NOT_NULL (typeinfo);
-    CHECK_UINT_EQ (ERIS_TYPE_STRUCT, typeinfo->type);
     CHECK_NOT_NULL (name);
 
-    for (uint32_t i = 0; i < typeinfo->ti_struct.n_members; i++)
-        if (string_eq (name, typeinfo->ti_struct.members[i].name))
-            return &typeinfo->ti_struct.members[i];
-    return NULL;
+    return (ErisTypeInfoMember*)
+        eris_typeinfo_struct_const_named_member (typeinfo, name);
 }
 
 
@@ -434,10 +444,27 @@ eris_typeinfo_struct_const_member (const ErisTypeInfo *typeinfo,
                                    uint32_t            index)
 {
     CHECK_NOT_NULL (typeinfo);
-    CHECK_UINT_EQ (ERIS_TYPE_STRUCT, typeinfo->type);
-    CHECK_U32_LT (typeinfo->ti_struct.n_members, index);
 
-    return &typeinfo->ti_struct.members[index];
+    switch (typeinfo->type) {
+        case ERIS_TYPE_POINTER:
+            return eris_typeinfo_struct_const_member (typeinfo->ti_pointer.typeinfo,
+                                                      index);
+        case ERIS_TYPE_TYPEDEF:
+            return eris_typeinfo_struct_const_member (typeinfo->ti_typedef.typeinfo,
+                                                      index);
+        case ERIS_TYPE_CONST:
+            return eris_typeinfo_struct_const_member (typeinfo->ti_const.typeinfo,
+                                                      index);
+        case ERIS_TYPE_ARRAY:
+            return eris_typeinfo_struct_const_member (typeinfo->ti_array.typeinfo,
+                                                      index);
+        case ERIS_TYPE_STRUCT:
+            CHECK_U32_LT (typeinfo->ti_struct.n_members, index);
+            return &typeinfo->ti_struct.members[index];
+
+        default:
+            return NULL;
+    }
 }
 
 
@@ -446,8 +473,7 @@ eris_typeinfo_struct_member (ErisTypeInfo *typeinfo,
                              uint32_t      index)
 {
     CHECK_NOT_NULL (typeinfo);
-    CHECK_UINT_EQ (ERIS_TYPE_STRUCT, typeinfo->type);
-    CHECK_U32_LT (typeinfo->ti_struct.n_members, index);
 
-    return &typeinfo->ti_struct.members[index];
+    return (ErisTypeInfoMember*)
+        eris_typeinfo_struct_const_member (typeinfo, index);
 }

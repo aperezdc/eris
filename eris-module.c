@@ -112,19 +112,7 @@ l_eris_typeinfo_index (lua_State *L)
 {
     const ErisTypeInfo *typeinfo = to_eris_typeinfo (L, 1);
     lua_settop (L, 2);
-    if (lua_isstring (L, 2)) {
-        const char *field = lua_tostring (L, 2);
-        if (!strcmp ("name", field)) {
-            lua_pushstring (L, eris_typeinfo_name (typeinfo));
-        } else if (!strcmp ("sizeof", field)) {
-            lua_pushinteger (L, eris_typeinfo_sizeof (typeinfo));
-        } else if (!strcmp ("readonly", field)) {
-            lua_pushboolean (L, eris_typeinfo_is_const (typeinfo));
-        } else {
-            return luaL_error (L, "invalid field '%s'", field);
-        }
-        return 1;
-    } else {
+    if (lua_isinteger (L, 2)) {
         uint32_t n_members = 0;
         if (!eris_typeinfo_is_struct (typeinfo, &n_members)) {
             return luaL_error (L, "type '%s' is not a struct",
@@ -138,12 +126,27 @@ l_eris_typeinfo_index (lua_State *L)
         }
 
         const ErisTypeInfoMember *member =
-                eris_typeinfo_struct_const_member (typeinfo, index);
+                eris_typeinfo_struct_const_member (typeinfo, index - 1);
+        lua_createtable (L, 0, 3);
         lua_pushstring (L, member->name);
+        lua_setfield (L, -2, "name");
         eris_typeinfo_push_userdata (L, member->typeinfo);
+        lua_setfield (L, -2, "type");
         lua_pushinteger (L, member->offset);
-        return 3;
+        lua_setfield (L, -2, "offset");
+    } else {
+        const char *field = luaL_checkstring (L, 2);
+        if (!strcmp ("name", field)) {
+            lua_pushstring (L, eris_typeinfo_name (typeinfo));
+        } else if (!strcmp ("sizeof", field)) {
+            lua_pushinteger (L, eris_typeinfo_sizeof (typeinfo));
+        } else if (!strcmp ("readonly", field)) {
+            lua_pushboolean (L, eris_typeinfo_is_const (typeinfo));
+        } else {
+            return luaL_error (L, "invalid field '%s'", field);
+        }
     }
+    return 1;
 }
 
 static int
@@ -1441,6 +1444,172 @@ eris_library_build_const_type_typeinfo (ErisLibrary *library,
     }
 
     return eris_typeinfo_new_const (base);
+}
+
+
+/*
+ * A structure like this:
+ *
+ *   struct Point {
+ *     int x, y;
+ *   }
+ *
+ * Becomes:
+ *
+ *   DW_TAG_structure_type
+ *     DW_AT_name                      Point
+ *     DW_AT_byte_size                 8
+ *       DW_TAG_member
+ *         DW_AT_name                  x
+ *         DW_AT_type                  <die-ref-offset>
+ *         DW_AT_data_member_location  <in-struct-offset>
+ *       DW_TAG_member
+ *         DW_AT_name                  y
+ *         DW_AT_type                  <die-ref-offset>
+ *         DW_AT_data_member_location  <in-struct-offset>
+ */
+static ErisTypeInfo*
+structure_members (ErisLibrary *library,
+                   Dwarf_Die    d_member_die,
+                   Dwarf_Error *d_error,
+                   const char  *struct_name,
+                   uint32_t     struct_size,
+                   uint32_t     index)
+{
+    CHECK_NOT_NULL (library);
+    CHECK_NOT_NULL (d_member_die);
+    CHECK_NOT_NULL (d_error);
+
+    Dwarf_Unsigned d_member_offset;
+    if (!die_get_uint_attribute (library,
+                                 d_member_die,
+                                 DW_AT_data_member_location,
+                                 &d_member_offset,
+                                 d_error)) {
+        TRACE ("%s: cannot get member DIE DW_AT_data_member_location (%s)\n",
+               struct_name ? struct_name : "<struct>", dw_errmsg (*d_error));
+        return NULL;
+    }
+
+    const char *member_name = die_get_string_attribute (library,
+                                                        d_member_die,
+                                                        DW_AT_name,
+                                                        d_error);
+    if (!member_name) {
+        TRACE ("%s: cannot get member DIE DW_AT_name (%s)\n",
+               struct_name ? struct_name : "<struct>", dw_errmsg (*d_error));
+        return NULL;
+    }
+
+    Dwarf_Off d_type_offset =
+            eris_library_get_die_ref_attribute_offset (library,
+                                                       d_member_die,
+                                                       DW_AT_type,
+                                                       d_error);
+    if (d_type_offset == DW_DLV_BADOFFSET) {
+        TRACE ("%s.%s: cannot get member DIE DW_AT_type offset (%s)\n",
+               struct_name ? struct_name : "<struct>",
+               member_name, dw_errmsg (*d_error));
+        return NULL;
+    }
+
+    const ErisTypeInfo *typeinfo = eris_library_lookup_type (library,
+                                                             d_type_offset,
+                                                             d_error);
+    if (!typeinfo) {
+        TRACE ("%s.%s: cannot get member type information (%s)\n",
+               struct_name ? struct_name : "<struct>",
+               member_name, dw_errmsg (*d_error));
+        return NULL;
+    }
+
+    /*
+     * At this point we have valid member_name, d_member_offset, and typeinfo.
+     */
+    Dwarf_Die d_next_member_die = NULL;
+    int status = dwarf_siblingof (library->d_debug,
+                                  d_member_die,
+                                  &d_next_member_die,
+                                  d_error);
+
+    if (status == DW_DLV_NO_ENTRY) {
+        /* No more entries. Create a ErisTypeInfo and fill-in member entry. */
+        ErisTypeInfo *result = eris_typeinfo_new_struct (struct_name,
+                                                         struct_size,
+                                                         index + 1);
+        ErisTypeInfoMember *member = eris_typeinfo_struct_member (result,
+                                                                  index);
+        member->typeinfo = typeinfo;
+        member->offset   = d_member_offset;
+        member->name     = member_name;
+        return result;
+    }
+
+    if (status == DW_DLV_OK) {
+        ErisTypeInfo *result = structure_members (library,
+                                                  d_next_member_die,
+                                                  d_error,
+                                                  struct_name,
+                                                  struct_size,
+                                                  index + 1);
+        dwarf_dealloc (library->d_debug, d_next_member_die, DW_DLA_DIE);
+        if (result) {
+            ErisTypeInfoMember *member = eris_typeinfo_struct_member (result,
+                                                                      index);
+            member->typeinfo = typeinfo;
+            member->offset   = d_member_offset;
+            member->name     = member_name;
+        }
+        return result;
+    }
+
+    CHECK_INT_EQ (DW_DLV_ERROR, status);
+    TRACE ("%s.%s: cannot get member DIE sibling (%s)\n",
+           struct_name ? struct_name : "<struct>",
+           member_name, dw_errmsg (*d_error));
+    return NULL;
+}
+
+
+static const ErisTypeInfo*
+eris_library_build_structure_type_typeinfo (ErisLibrary *library,
+                                            Dwarf_Die    d_type_die,
+                                            Dwarf_Error *d_error)
+{
+    CHECK_NOT_NULL (library);
+    CHECK_NOT_NULL (d_type_die);
+    CHECK_NOT_NULL (d_error);
+
+    Dwarf_Unsigned d_byte_size;
+    if (!die_get_uint_attribute (library,
+                                 d_type_die,
+                                 DW_AT_byte_size,
+                                 &d_byte_size,
+                                 d_error)) {
+        TRACE ("cannot get TUE DW_AT_byte_size (%s)\n", dw_errmsg (*d_error));
+        return NULL;
+    }
+
+    *d_error = DW_DLE_NE;
+    const char *name = die_get_string_attribute (library,
+                                                 d_type_die,
+                                                 DW_AT_name,
+                                                 d_error);
+    if (*d_error != DW_DLE_NE) {
+        TRACE ("cannot get TUE DW_AT_name (%s)\n", dw_errmsg (*d_error));
+        return NULL;
+    }
+
+    Dwarf_Die d_child_die = NULL;
+    if (dwarf_child (d_type_die, &d_child_die, d_error) != DW_DLV_OK)
+        return NULL;
+
+    return structure_members (library,
+                              d_child_die,
+                              d_error,
+                              name,
+                              d_byte_size,
+                              0);
 }
 
 

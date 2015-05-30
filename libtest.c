@@ -29,6 +29,35 @@ double   var_dbl = 1.0;
 /* Constant declaration. */
 const int const_int = 42;
 
+/* Anynymous structure. */
+struct {
+    int member;
+} anon_struct = {
+    .member = 121,
+};
+
+/* Previously defined structure. */
+struct Point {
+    int x;
+    int y;
+};
+
+struct Point origin = { .x = 0, .y = 0 };
+
+/* Structure typedef. */
+typedef struct Point Point;
+Point max_pos = { .x = 800, .y = 600 };
+
+typedef struct {
+    Point tl;
+    Point br;
+} Square;
+
+Square screen = {
+    .tl.x = 10, .tl.y = 20,
+    .br.x = 50, .br.y = 80,
+};
+
 
 static int
 private_add (int a, int b)

@@ -73,9 +73,9 @@ extern const char* eris_type_name (ErisType type);
 typedef struct _ErisTypeInfo ErisTypeInfo;
 
 typedef struct {
-    const char   *name;
-    uint32_t      offset;
-    ErisTypeInfo *typeinfo;
+    const char         *name;
+    uint32_t            offset;
+    const ErisTypeInfo *typeinfo;
 } ErisTypeInfoMember;
 
 
@@ -86,6 +86,9 @@ extern const ErisTypeInfo* eris_typeinfo_new_base_type (ErisType    type,
                                                         const char *name);
 extern const ErisTypeInfo* eris_typeinfo_new_array_type (const ErisTypeInfo *base,
                                                          uint64_t            n_items);
+extern ErisTypeInfo* eris_typeinfo_new_struct (const char *name,
+                                               uint32_t    size,
+                                               uint32_t    n_members);
 extern const ErisTypeInfo* eris_typeinfo_base (const ErisTypeInfo *typeinfo);
 
 extern const char* eris_typeinfo_name (const ErisTypeInfo *typeinfo);
