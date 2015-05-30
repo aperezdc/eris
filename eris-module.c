@@ -396,34 +396,6 @@ make_function_wrapper (lua_State   *L,
 }
 
 
-static Dwarf_Die
-die_get_die_reference_attribute (ErisLibrary *library,
-                                 Dwarf_Die    d_die,
-                                 Dwarf_Half   d_attr_tag,
-                                 Dwarf_Error *d_error)
-{
-    Dwarf_Attribute d_attr = NULL;
-    if (dwarf_attr (d_die, d_attr_tag, &d_attr, d_error) != DW_DLV_OK)
-        return NULL;
-
-    Dwarf_Die d_result_die = NULL;
-    Dwarf_Die d_attr_die;
-    Dwarf_Off d_offset;
-    if (dwarf_global_formref (d_attr,
-                              &d_offset,
-                              d_error) == DW_DLV_OK &&
-        dwarf_offdie (library->d_debug,
-                      d_offset,
-                      &d_attr_die,
-                      d_error) == DW_DLV_OK) {
-        d_result_die = d_attr_die;
-    }
-
-    dwarf_dealloc (library->d_debug, d_attr, DW_DLA_ATTR);
-    return d_result_die;
-}
-
-
 static Dwarf_Off
 eris_library_get_die_ref_attribute_offset (ErisLibrary *library,
                                            Dwarf_Die    d_die,
