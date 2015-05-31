@@ -58,9 +58,13 @@ build ${obj}/libtest.o  : cc libtest.c
 build ${obj}/libtest.so : ld ${obj}/libtest.o
   ldflags = ${ldflags} -shared
 
+build ${obj}/libtest2.o  : cc libtest2.c
+build ${obj}/libtest2.so : ld ${obj}/libtest2.o
+  ldflags = ${ldflags} -shared
 
-build all : phony $
-${obj}/libtest.so $
+build all : phony  $
+${obj}/libtest.so  $
+${obj}/libtest2.so $
 ${obj}/testutil.so $
 ${obj}/eris.so
 

@@ -90,13 +90,16 @@ ${OUT}/%:
 all: ${LUA} \
 	 ${OUT}/eris.so \
 	 ${OUT}/testutil.so \
+	 ${OUT}/libtest2.so \
 	 ${OUT}/libtest.so
 	$(if ${MAKE_TERMOUT},$Q echo)
 
 clean:
+	$Q ${RM} ${OUT}/lua ${LUA_OBJS}
 	$Q ${RM} ${OUT}/eris.so ${ERIS_MODULE_OBJS}
 	$Q ${RM} ${OUT}/testutil.so ${TESTUTIL_MODULE_OBJS}
 	$Q ${RM} ${OUT}/libtest.so ${OUT}/libtest.o
+	$Q ${RM} ${OUT}/libtest2.so ${OUT}/libtest2.o
 
 eris-module.c: eris-lua.h eris-libdwarf.h
 testutil-module.c: eris-lua.h
@@ -111,6 +114,8 @@ ${OUT}/testutil.so: LDFLAGS += -shared
 ${OUT}/libtest.so: ${OUT}/libtest.o
 ${OUT}/libtest.so: LDFLAGS += -shared
 
+${OUT}/libtest2.so: ${OUT}/libtest2.o
+${OUT}/libtest2.so: LDFLAGS += -shared
 
 build.conf: configure
 	./configure

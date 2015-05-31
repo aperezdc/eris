@@ -935,8 +935,18 @@ eris_load (lua_State *L)
 {
     size_t name_length;
     const char *name = luaL_checklstring (L, 1, &name_length);
-    char path[PATH_MAX];
 
+    unsigned dlopen_flags = RTLD_NOW;
+    if (lua_gettop (L) == 2) {
+        if (!lua_isboolean (L, 2)) {
+            return luaL_error (L, "paramter #2 should be a boolean value");
+        }
+        if (lua_toboolean (L, 2)) {
+            dlopen_flags |= RTLD_GLOBAL;
+        }
+    }
+
+    char path[PATH_MAX];
     errno = 0;
     if (!find_library (name, path)) {
         return luaL_error (L, "could not find library '%s' (%s)", name,
@@ -944,7 +954,7 @@ eris_load (lua_State *L)
     }
     TRACE ("found %s -> %s\n", name, path);
 
-    void *dl = dlopen (path, RTLD_NOW | RTLD_GLOBAL);
+    void *dl = dlopen (path, dlopen_flags);
     if (!dl) {
         return luaL_error (L, "could not link library '%s' (%s)",
                            path, dlerror ());
