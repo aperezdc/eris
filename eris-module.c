@@ -1078,9 +1078,33 @@ eris_type (lua_State *L)
 }
 
 
+/*
+ * Usage: eris.sizeof(ct [, nelem])
+ *
+ * TODO: Handle second "nelem" parameter for VLAs.
+ */
+static int
+eris_sizeof (lua_State *L)
+{
+    const ErisTypeInfo *typeinfo = NULL;
+
+    ErisVariable *ev;
+    if ((ev = luaL_testudata (L, 1, ERIS_VARIABLE))) {
+        typeinfo = ev->typeinfo;
+    } else {
+        typeinfo = to_eris_typeinfo (L, 1);
+    }
+
+    CHECK_NOT_NULL (typeinfo);
+    lua_pushinteger (L, eris_typeinfo_sizeof (typeinfo));
+    return 1;
+}
+
+
 static const luaL_Reg erislib[] = {
-    { "load", eris_load },
-    { "type", eris_type },
+    { "load",   eris_load   },
+    { "sizeof", eris_sizeof },
+    { "type",   eris_type   },
     { NULL, NULL },
 };
 
