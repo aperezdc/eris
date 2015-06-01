@@ -51,7 +51,11 @@ struct _ErisLibrary {
     Dwarf_Signed  d_num_types;
 
     ErisTypeCache type_cache;
+    ErisLibrary  *next;
 };
+
+
+static ErisLibrary *library_list = NULL;
 
 
 static const char ERIS_LIBRARY[]  = "org.perezdecastro.eris.Library";
@@ -305,6 +309,15 @@ void eris_library_free (ErisLibrary *el)
 
     close (el->fd);
     dlclose (el->dl);
+
+    if (library_list == el) {
+        library_list = library_list->next;
+    } else {
+        ErisLibrary *prev = library_list;
+        while (prev->next && prev->next != el) prev = prev->next;
+        prev->next = prev->next->next;
+    }
+
     free (el);
 }
 
@@ -1047,6 +1060,8 @@ eris_load (lua_State *L)
     el->d_num_globals = d_num_globals;
     el->d_types = d_types;
     el->d_num_types = d_num_types;
+    el->next = library_list;
+    library_list = el;
     eris_type_cache_init (&el->type_cache);
     eris_library_push_userdata (L, el);
     TRACE ("new ErisLibrary* at %p\n", el);
@@ -1101,10 +1116,55 @@ eris_sizeof (lua_State *L)
 }
 
 
+/*
+ * Usage: typeinfo = eris.typeof(ct)
+ */
+static int
+eris_typeof (lua_State *L)
+{
+    if (luaL_testudata (L, 1, ERIS_TYPEINFO)) {
+        lua_settop (L, 1);
+    } else {
+        ErisVariable *ev = luaL_testudata (L, 1, ERIS_VARIABLE);
+        if (ev) {
+            eris_typeinfo_push_userdata (L, ev->typeinfo);
+        } else {
+            const char *name = luaL_checkstring (L, 1);
+            for (ErisLibrary *el = library_list; el; el = el->next) {
+                Dwarf_Error d_error = 0;
+                Dwarf_Off d_offset = eris_library_get_tue_offset (el,
+                                                                  name,
+                                                                  &d_error);
+                if (d_offset == DW_DLV_BADOFFSET) {
+                    if (d_error != DW_DLE_NE) {
+                        return luaL_error (L, "%s: could not lookup DWARF TUE "
+                                           "offset (library: %p; %s)",
+                                           name, el, dw_errmsg (d_error));
+                    }
+                    continue;
+                }
+
+                const ErisTypeInfo *typeinfo =
+                        eris_library_lookup_type (el, d_offset, &d_error);
+                if (!typeinfo) {
+                    return luaL_error (L, "%s: no type info (library: %p; %s)",
+                                       name, el, dw_errmsg (d_error));
+                }
+                eris_typeinfo_push_userdata (L, typeinfo);
+                return 1;
+            }
+            lua_pushnil (L);
+        }
+    }
+    return 1;
+}
+
+
 static const luaL_Reg erislib[] = {
     { "load",   eris_load   },
-    { "sizeof", eris_sizeof },
     { "type",   eris_type   },
+    { "sizeof", eris_sizeof },
+    { "typeof", eris_typeof },
     { NULL, NULL },
 };
 
