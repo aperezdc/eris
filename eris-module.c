@@ -483,6 +483,27 @@ dw_errmsg (Dwarf_Error d_error)
 }
 
 
+static ErisVariable*
+eris_variable_push_userdata (lua_State          *L,
+                             ErisLibrary        *library,
+                             const ErisTypeInfo *typeinfo,
+                             void               *address,
+                             const char         *name)
+{
+    CHECK_NOT_NULL (typeinfo);
+    CHECK_NOT_NULL (address);
+
+    ErisVariable *V = lua_newuserdata (L, sizeof (ErisVariable));
+    eris_symbol_init ((ErisSymbol*) V, library, address, name);
+    V->typeinfo_const = typeinfo;
+    V->typeinfo_owned = false;
+    luaL_setmetatable (L, ERIS_VARIABLE);
+    TRACE ("new ErisVariable* at %p (%p:%s), typeinfo %p\n",
+           V, library, name ? name : "<anonymous>", typeinfo);
+    return V;
+}
+
+
 static int
 make_variable_wrapper (lua_State   *L,
                        ErisLibrary *library,
@@ -509,13 +530,7 @@ make_variable_wrapper (lua_State   *L,
         return luaL_error (L, "%s: could not obtain type information (%s)",
                            dw_errmsg (d_error));
     }
-
-    ErisVariable *ev = lua_newuserdata (L, sizeof (ErisVariable));
-    eris_symbol_init ((ErisSymbol*) ev, library, address, name);
-    ev->typeinfo_owned = false;
-    ev->typeinfo_const = typeinfo;
-    luaL_setmetatable (L, ERIS_VARIABLE);
-    TRACE ("new ErisVariable* at %p (%p:%s)\n", ev, library, name);
+    eris_variable_push_userdata (L, library, typeinfo, address, name);
     return 1;
 }
 
@@ -773,7 +788,17 @@ cvalue_push (lua_State          *L,
     switch (eris_typeinfo_type (typeinfo)) {
         INTEGER_TYPES (INTEGER_TO_LUA)
         FLOAT_TYPES (FLOAT_TO_LUA)
-        default: return luaL_error (L, "unsupported type");
+        case ERIS_TYPE_ARRAY:
+        case ERIS_TYPE_STRUCT:
+            address += eris_typeinfo_sizeof (typeinfo) * index;
+            eris_variable_push_userdata (L,
+                                         NULL,
+                                         typeinfo,
+                                         (void*) address,
+                                         NULL);
+            return 1;
+        default:
+            return luaL_error (L, "unsupported type");
     }
 }
 

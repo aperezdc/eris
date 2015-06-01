@@ -12,3 +12,5 @@ assert.Equal("anon_struct", anon_struct.__name)
 local struct_type = anon_struct.__type
 assert.Equal(1, #struct_type)
 assert.Equal("member", struct_type[1].name)
+assert.Equal(121, anon_struct.member)
+assert.Equal(121, anon_struct[1])

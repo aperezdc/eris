@@ -58,6 +58,25 @@ Square screen = {
     .br.x = 50, .br.y = 80,
 };
 
+typedef struct {
+    int   tangential;
+    Point points[4];
+} Bezier;
+
+Bezier curve = {
+    0,
+    { { 1, 2 },
+      { 3, 4 },
+      { 5, 6 },
+      { 1, 1 } }
+};
+
+Point triangle[] = {
+    { 1, 1 },
+    { 2, 3 },
+    { 1, 3 },
+};
+
 
 static int
 private_add (int a, int b)
