@@ -117,12 +117,11 @@ l_eris_typeinfo_index (lua_State *L)
     const ErisTypeInfo *typeinfo = to_eris_typeinfo (L, 1);
     lua_settop (L, 2);
     if (lua_isinteger (L, 2)) {
-        uint32_t n_members = 0;
-        if (!eris_typeinfo_is_struct (typeinfo, &n_members)) {
-            return luaL_error (L, "type '%s' is not a struct",
-                               eris_typeinfo_name (typeinfo));
+        if (!(typeinfo = eris_typeinfo_get_struct (typeinfo))) {
+            return luaL_error (L, "type is not a struct");
         }
 
+        uint32_t n_members = eris_typeinfo_struct_n_members (typeinfo);
         lua_Integer index = luaL_checkinteger (L, 2);
         if (index < 1 || index > n_members) {
             return luaL_error (L, "index %d out of bounds (length=%d)",
@@ -157,13 +156,10 @@ static int
 l_eris_typeinfo_len (lua_State *L)
 {
     const ErisTypeInfo *typeinfo = to_eris_typeinfo (L, 1);
-
-    uint32_t n_members = 0;
-    if (!eris_typeinfo_is_struct (typeinfo, &n_members)) {
-        return luaL_error (L, "type '%s' is not a struct",
-                           eris_typeinfo_name (typeinfo));
+    if (!(typeinfo = eris_typeinfo_get_struct (typeinfo))) {
+        return luaL_error (L, "type is not a struct");
     }
-    lua_pushinteger (L, n_members);
+    lua_pushinteger (L, eris_typeinfo_struct_n_members (typeinfo));
     return 1;
 }
 
@@ -1160,11 +1156,62 @@ eris_typeof (lua_State *L)
 }
 
 
+/*
+ * Usage: offset [, bpos, bsize] = eris.offsetof(ct, field)
+ *
+ * TODO: Implement returning "bpos" and "bsize" for bit fields.
+ */
+static int
+eris_offsetof (lua_State *L)
+{
+    const ErisTypeInfo *typeinfo = NULL;
+
+    ErisVariable *ev;
+    if ((ev = luaL_testudata (L, 1, ERIS_VARIABLE))) {
+        typeinfo = ev->typeinfo;
+    } else {
+        typeinfo = to_eris_typeinfo (L, 1);
+    }
+
+    CHECK_NOT_NULL (typeinfo);
+
+    if (!(typeinfo = eris_typeinfo_get_struct (typeinfo))) {
+        return luaL_error (L, "parameter #1 is not a struct");
+    }
+
+    const ErisTypeInfoMember *member;
+    if (lua_isinteger (L, 2)) {
+        uint32_t n_members = eris_typeinfo_struct_n_members (typeinfo);
+        lua_Integer index = luaL_checkinteger (L, 2);
+        if (index < 0) index += n_members;
+        if (index <= 0 || index > n_members) {
+            return luaL_error (L, "index %d out of bounds "
+                               "(effective=%d, length=%d)",
+                               luaL_checkinteger (L, 2), index, n_members);
+        }
+        member = eris_typeinfo_struct_const_member (typeinfo, index - 1);
+    } else {
+        const char *name = luaL_checkstring (L, 2);
+        member = eris_typeinfo_struct_const_named_member (typeinfo, name);
+        if (!member) {
+            const char *typename = eris_typeinfo_name (typeinfo);
+            return luaL_error (L, "%s.%s: no such member field",
+                               typename ? typename : "<struct>", name);
+        }
+    }
+
+    CHECK_NOT_NULL (member);
+    lua_pushinteger (L, member->offset);
+    return 1;
+}
+
+
 static const luaL_Reg erislib[] = {
-    { "load",   eris_load   },
-    { "type",   eris_type   },
-    { "sizeof", eris_sizeof },
-    { "typeof", eris_typeof },
+    { "load",     eris_load     },
+    { "type",     eris_type     },
+    { "sizeof",   eris_sizeof   },
+    { "typeof",   eris_typeof   },
+    { "offsetof", eris_offsetof },
     { NULL, NULL },
 };
 

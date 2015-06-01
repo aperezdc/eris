@@ -100,10 +100,10 @@ extern bool        eris_typeinfo_is_valid (const ErisTypeInfo *typeinfo);
 extern bool        eris_typeinfo_is_const (const ErisTypeInfo *typeinfo);
 extern bool        eris_typeinfo_is_array (const ErisTypeInfo *typeinfo,
                                            uint64_t           *n_items);
-extern bool        eris_typeinfo_is_struct (const ErisTypeInfo *typeinfo,
-                                            uint32_t           *n_members);
 extern uint64_t    eris_typeinfo_array_n_items (const ErisTypeInfo* typeinfo);
 extern uint32_t    eris_typeinfo_struct_n_members (const ErisTypeInfo *typeinfo);
+
+extern const ErisTypeInfo* eris_typeinfo_get_struct (const ErisTypeInfo *typeinfo);
 
 extern ErisTypeInfoMember*
 eris_typeinfo_struct_named_member (ErisTypeInfo *typeinfo,
