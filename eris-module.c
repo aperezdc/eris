@@ -1480,7 +1480,9 @@ eris_library_build_base_type_typeinfo (ErisLibrary *library,
         }
     }
 
-    return eris_typeinfo_new_base (type, name);
+    const ErisTypeInfo *typeinfo = eris_typeinfo_new_base (type, name);
+    TRACE ("new ErisTypeInfo* at %p (%s)\n", typeinfo, name);
+    return typeinfo;
 }
 
 
@@ -1519,7 +1521,9 @@ eris_library_build_typedef_typeinfo (ErisLibrary *library,
         return NULL;
     }
 
-    return eris_typeinfo_new_typedef (base, name);
+    const ErisTypeInfo *typeinfo = eris_typeinfo_new_typedef (base, name);
+    TRACE ("new ErisTypeInfo* at %p (typedef %p %s)\n", typeinfo, base, name);
+    return typeinfo;
 }
 
 
@@ -1604,9 +1608,10 @@ eris_library_build_array_type_typeinfo (ErisLibrary *library,
         return NULL;
     }
 
-    TRACE ("new typeinfo: %s[%" PRIu64 "]\n",
-           eris_typeinfo_name (base), n_items);
-    return eris_typeinfo_new_array (base, n_items);
+    const ErisTypeInfo *typeinfo = eris_typeinfo_new_array (base, n_items);
+    TRACE ("new ErisTypeInfo* at %p (%s[%" PRIu64 "])\n",
+           typeinfo, eris_typeinfo_name (base), n_items);
+    return typeinfo;
 }
 
 
@@ -1636,7 +1641,9 @@ eris_library_build_const_type_typeinfo (ErisLibrary *library,
         return NULL;
     }
 
-    return eris_typeinfo_new_const (base);
+    const ErisTypeInfo *typeinfo = eris_typeinfo_new_const (base);
+    TRACE ("new ErisTypeInfo* at %p (const %p)\n", typeinfo, base);
+    return typeinfo;
 }
 
 
@@ -1797,12 +1804,14 @@ eris_library_build_structure_type_typeinfo (ErisLibrary *library,
     if (dwarf_child (d_type_die, &d_child_die, d_error) != DW_DLV_OK)
         return NULL;
 
-    return structure_members (library,
-                              d_child_die,
-                              d_error,
-                              name,
-                              d_byte_size,
-                              0);
+    const ErisTypeInfo *typeinfo = structure_members (library,
+                                                      d_child_die,
+                                                      d_error,
+                                                      name,
+                                                      d_byte_size,
+                                                      0);
+    TRACE ("new ErisTypeInfo* at %p (struct %s)\n", typeinfo, name);
+    return typeinfo;
 }
 
 
