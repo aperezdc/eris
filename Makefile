@@ -71,6 +71,10 @@ ERIS_MODULE_OBJS := $(patsubst %.c,${OUT}/%.o,${ERIS_MODULE_SRCS})
 TESTUTIL_MODULE_SRCS := testutil-module.c
 TESTUTIL_MODULE_OBJS := $(patsubst %.c,${OUT}/%.o,${TESTUTIL_MODULE_SRCS})
 
+%.inc: %.gperf
+	$P gperf $<
+	$Q gperf -o $@ $<
+
 ${OUT}/%.o: ${OUT}/%.c
 	$P Compile $@
 	$Q mkdir -p $(dir $@)
@@ -101,7 +105,7 @@ clean:
 	$Q ${RM} ${OUT}/libtest.so ${OUT}/libtest.o
 	$Q ${RM} ${OUT}/libtest2.so ${OUT}/libtest2.o
 
-eris-module.c: eris-lua.h eris-libdwarf.h
+eris-module.c: eris-lua.h eris-libdwarf.h specials.inc
 testutil-module.c: eris-lua.h
 
 ${OUT}/eris.so: ${ERIS_MODULE_OBJS} ${LIBDWARF}

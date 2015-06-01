@@ -16,12 +16,12 @@ for _, varname in ipairs { "var_flt", "var_dbl" } do
 	assert.Equal(libtest, variable.__library)
 
 	-- Set a floating point value.
-	variable[1] = -42.5
+	variable.__value = -42.5
 	assert.Not.Equal(1.0, variable.__value)
 	assert.Equal(-42.5, variable.__value)
 
 	-- Set an integral value (must work for floating point values).
-	variable[1] = 42
+	variable.__value = 42
 	assert.Not.Equal(1.0, variable.__value)
 	assert.Not.Equal(-42.5, variable.__value)
 	assert.Equal(42, variable.__value)

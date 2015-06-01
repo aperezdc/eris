@@ -13,7 +13,7 @@ function check_variable (variable, expected_value)
 	assert.Not.Callable(variable)
 	assert.Equal(expected_value, variable.__value)
 	assert.Equal(libtest, variable.__library)
-	variable[1] = 100
+	variable.__value = 100
 	assert.Equal(100, variable.__value)
 end
 

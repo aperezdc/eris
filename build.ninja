@@ -12,6 +12,10 @@ rule untargz
   command = tar -xzf ${in} -C ${obj} && touch ${out}
   description = untargz ${in}
 
+rule gperf
+  command = gperf --output=${out} ${in}
+  description = gperf ${in}
+
 rule staticlib
   command = ar cru ${out} ${in}
   description = Ar ${out}
@@ -30,13 +34,15 @@ rule ld
 include lua-${lua_build}.ninja
 include libdwarf-${libdwarf_build}.ninja
 
+build specials.inc : gperf specials.gperf
+
 # Lua module: eris.so
 #
 build ${obj}/eris-util.o      : cc eris-util.c
 build ${obj}/eris-trace.o     : cc eris-trace.c
 build ${obj}/eris-typing.o    : cc eris-typing.c
 build ${obj}/eris-typecache.o : cc eris-typecache.c
-build ${obj}/eris-module.o    : cc eris-module.c | eris-lua.h eris-libdwarf.h
+build ${obj}/eris-module.o    : cc eris-module.c | specials.inc eris-lua.h eris-libdwarf.h
 build ${obj}/eris.so : ld     $
       ${obj}/eris-util.o      $
       ${obj}/eris-trace.o     $

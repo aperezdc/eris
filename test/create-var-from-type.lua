@@ -11,10 +11,10 @@ local libtest = eris.load "libtest"
 local int32_t = eris.type(libtest, "int32_t")
 
 local value = int32_t()
-assert.Equal(int32_t, value.__type)
+assert.Equal(int32_t, eris.typeof(value))
 assert.Equal(1, #value)
 assert.Equal(0, value.__value)
 
-value[1] = 42
+value.__value = 42
 assert.Equal(42, value.__value)
 

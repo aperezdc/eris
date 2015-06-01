@@ -1,0 +1,17 @@
+%language=ANSI-C
+%struct-type
+%compare-strncmp
+%readonly-tables
+%enum
+%includes
+%define hash-function-name eris_special_hash
+%define lookup-function-name eris_special_lookup
+struct ErisSpecial {
+	const char *name;
+	ErisSpecialCode code;
+};
+%%
+__name, ERIS_SPECIAL_NAME
+__type, ERIS_SPECIAL_TYPE
+__value, ERIS_SPECIAL_VALUE
+__library, ERIS_SPECIAL_LIBRARY

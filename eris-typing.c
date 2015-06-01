@@ -53,7 +53,7 @@ struct _ErisTypeInfo {
 const char*
 eris_type_name (ErisType type)
 {
-#define TYPE_NAME_ITEM(suffix, ctype) \
+#define TYPE_NAME_ITEM(suffix, name, ctype) \
         case ERIS_TYPE_ ## suffix: return #ctype;
 
     switch (type) {
@@ -69,7 +69,7 @@ eris_type_name (ErisType type)
 uint32_t
 eris_type_size (ErisType type)
 {
-#define TYPE_SIZE_ITEM(suffix, ctype) \
+#define TYPE_SIZE_ITEM(suffix, name, ctype) \
         case ERIS_TYPE_ ## suffix: return sizeof (ctype);
 
     switch (type) {
@@ -92,11 +92,17 @@ eris_typeinfo_new (ErisType type, uint32_t n_members)
 }
 
 
-const ErisTypeInfo*
-eris_typeinfo_new_base_type (ErisType    type,
-                             const char *name)
+void
+eris_typeinfo_free (ErisTypeInfo *typeinfo)
 {
-    CHECK_UINT_NE (ERIS_TYPE_NONE,    type);
+    free (typeinfo);
+}
+
+
+ErisTypeInfo*
+eris_typeinfo_new_base (ErisType    type,
+                        const char *name)
+{
     CHECK_UINT_NE (ERIS_TYPE_VOID,    type);
     CHECK_UINT_NE (ERIS_TYPE_POINTER, type);
     CHECK_UINT_NE (ERIS_TYPE_TYPEDEF, type);
@@ -111,7 +117,7 @@ eris_typeinfo_new_base_type (ErisType    type,
 }
 
 
-const ErisTypeInfo*
+ErisTypeInfo*
 eris_typeinfo_new_const (const ErisTypeInfo *base)
 {
     CHECK_NOT_NULL (base);
@@ -122,7 +128,7 @@ eris_typeinfo_new_const (const ErisTypeInfo *base)
 }
 
 
-const ErisTypeInfo*
+ErisTypeInfo*
 eris_typeinfo_new_typedef (const ErisTypeInfo *base,
                            const char         *name)
 {
@@ -136,9 +142,9 @@ eris_typeinfo_new_typedef (const ErisTypeInfo *base,
 }
 
 
-const ErisTypeInfo*
-eris_typeinfo_new_array_type (const ErisTypeInfo *base,
-                              uint64_t            n_items)
+ErisTypeInfo*
+eris_typeinfo_new_array (const ErisTypeInfo *base,
+                         uint64_t            n_items)
 {
     CHECK_NOT_NULL (base);
 
@@ -162,71 +168,12 @@ eris_typeinfo_new_struct (const char *name,
 }
 
 
-bool
-eris_typeinfo_is_valid (const ErisTypeInfo *typeinfo)
-{
-    return typeinfo && typeinfo->type != ERIS_TYPE_NONE;
-}
-
-
-bool
-eris_typeinfo_is_const (const ErisTypeInfo *typeinfo)
-{
-    CHECK_NOT_NULL (typeinfo);
-
-    switch (typeinfo->type) {
-        case ERIS_TYPE_VOID: /* XXX */
-        case ERIS_TYPE_CONST:
-            return true;
-
-        case ERIS_TYPE_TYPEDEF:
-            return eris_typeinfo_is_const (typeinfo->ti_typedef.typeinfo);
-        case ERIS_TYPE_POINTER:
-            return eris_typeinfo_is_const (typeinfo->ti_pointer.typeinfo);
-        case ERIS_TYPE_ARRAY:
-            return eris_typeinfo_is_const (typeinfo->ti_array.typeinfo);
-
-        default:
-            return false;
-    }
-}
-
-
-bool
-eris_typeinfo_is_array (const ErisTypeInfo *typeinfo,
-                        uint64_t           *n_items)
-{
-    CHECK_NOT_NULL (typeinfo);
-
-    switch (typeinfo->type) {
-        case ERIS_TYPE_ARRAY:
-            if (n_items) *n_items = typeinfo->ti_array.n_items;
-            return true;
-
-        case ERIS_TYPE_POINTER:
-            return eris_typeinfo_is_array (typeinfo->ti_pointer.typeinfo,
-                                           n_items);
-        case ERIS_TYPE_TYPEDEF:
-            return eris_typeinfo_is_array (typeinfo->ti_typedef.typeinfo,
-                                           n_items);
-        case ERIS_TYPE_CONST:
-            return eris_typeinfo_is_array (typeinfo->ti_const.typeinfo,
-                                           n_items);
-
-        default:
-            return false;
-    }
-}
-
-
 const char*
 eris_typeinfo_name (const ErisTypeInfo *typeinfo)
 {
     CHECK_NOT_NULL (typeinfo);
 
     switch (typeinfo->type) {
-        case ERIS_TYPE_NONE:
-            return NULL;
         case ERIS_TYPE_VOID:
             return "void";
         case ERIS_TYPE_STRUCT:
@@ -279,7 +226,6 @@ uint32_t
 eris_typeinfo_sizeof (const ErisTypeInfo *typeinfo)
 {
     CHECK (typeinfo);
-    CHECK_UINT_NE (ERIS_TYPE_NONE, typeinfo->type);
 
     switch (typeinfo->type) {
         case ERIS_TYPE_VOID:
@@ -304,13 +250,36 @@ eris_typeinfo_sizeof (const ErisTypeInfo *typeinfo)
 const ErisTypeInfo*
 eris_typeinfo_get_struct (const ErisTypeInfo *typeinfo)
 {
-    CHECK (typeinfo);
+    CHECK_NOT_NULL (typeinfo);
 
     if (typeinfo->type == ERIS_TYPE_STRUCT)
         return typeinfo;
 
     typeinfo = eris_typeinfo_base (typeinfo);
     return typeinfo ? eris_typeinfo_get_struct (typeinfo) : NULL;
+}
+
+
+bool
+eris_typeinfo_get_const (const ErisTypeInfo *typeinfo)
+{
+    CHECK_NOT_NULL (typeinfo);
+
+    if (typeinfo->type == ERIS_TYPE_CONST)
+        return true;
+
+    typeinfo = eris_typeinfo_base (typeinfo);
+    return typeinfo ? eris_typeinfo_get_const (typeinfo) : false;
+}
+
+
+const ErisTypeInfo*
+eris_typeinfo_get_non_synthetic (const ErisTypeInfo *typeinfo)
+{
+    CHECK_NOT_NULL (typeinfo);
+    while (typeinfo && eris_type_is_synthetic (typeinfo->type))
+        typeinfo = eris_typeinfo_base (typeinfo);
+    return typeinfo;
 }
 
 

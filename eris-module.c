@@ -236,8 +236,11 @@ typedef struct {
 
 typedef struct {
     ERIS_COMMON_FIELDS;
-    const ErisTypeInfo  *typeinfo;
-    size_t               n_items;
+    union {
+        ErisTypeInfo       *typeinfo;
+        const ErisTypeInfo *typeinfo_const;
+    };
+    bool                    typeinfo_owned;
 } ErisVariable;
 
 
@@ -376,11 +379,18 @@ l_eris_typeinfo_call (lua_State *L)
     if (n_items < 1)
         return luaL_error (L, "argument #2 must be > 0");
 
-    size_t payload = eris_typeinfo_sizeof (typeinfo) * n_items;
+    bool typeinfo_owned = false;
+    if (lua_gettop (L) > 1) {
+        typeinfo = eris_typeinfo_new_array (typeinfo, n_items);
+        typeinfo_owned = true;
+    }
+
+    size_t payload = eris_typeinfo_sizeof (typeinfo);
+
     ErisVariable *ev = lua_newuserdata (L, sizeof (ErisVariable) + payload);
     eris_symbol_init ((ErisSymbol*) ev, NULL, &ev[1], NULL);
-    ev->typeinfo = typeinfo;
-    ev->n_items = n_items;
+    ev->typeinfo_owned = typeinfo_owned;
+    ev->typeinfo_const = typeinfo;
     memset (ev->address, 0x00, payload);
     luaL_setmetatable (L, ERIS_VARIABLE);
     TRACE ("new ErisVariable* at %p (<Lua>)\n", ev);
@@ -495,15 +505,15 @@ make_variable_wrapper (lua_State   *L,
     const ErisTypeInfo* typeinfo = eris_library_lookup_type (library,
                                                              d_offset,
                                                              &d_error);
-    if (!typeinfo || !eris_typeinfo_is_valid (typeinfo)) {
+    if (!typeinfo) {
         return luaL_error (L, "%s: could not obtain type information (%s)",
                            dw_errmsg (d_error));
     }
 
     ErisVariable *ev = lua_newuserdata (L, sizeof (ErisVariable));
     eris_symbol_init ((ErisSymbol*) ev, library, address, name);
-    ev->typeinfo = typeinfo;
-    ev->n_items  = 1; /* TODO: Set for arrays. */
+    ev->typeinfo_owned = false;
+    ev->typeinfo_const = typeinfo;
     luaL_setmetatable (L, ERIS_VARIABLE);
     TRACE ("new ErisVariable* at %p (%p:%s)\n", ev, library, name);
     return 1;
@@ -695,6 +705,9 @@ eris_variable_gc (lua_State *L)
     }
 #endif /* ERIS_TRACE */
 
+    if (ev->typeinfo_owned) {
+        eris_typeinfo_free (ev->typeinfo);
+    }
     eris_symbol_free ((ErisSymbol*) ev);
     return 0;
 }
@@ -721,172 +734,174 @@ static int
 eris_variable_len (lua_State *L)
 {
     ErisVariable *ev = to_eris_variable (L);
-
-    const ErisTypeInfo *typeinfo = ev->typeinfo;
-    ErisType type = eris_typeinfo_type (typeinfo);
-    while (type == ERIS_TYPE_TYPEDEF || type == ERIS_TYPE_CONST) {
-        typeinfo = eris_typeinfo_base (typeinfo);
-        type = eris_typeinfo_type (typeinfo);
-    }
-
-    uint64_t n_items = ev->n_items;
-    if (type == ERIS_TYPE_ARRAY) {
-        n_items  = eris_typeinfo_array_n_items (typeinfo);
-        typeinfo = eris_typeinfo_base (typeinfo);
-    }
-
-    lua_pushinteger (L, n_items);
+    const ErisTypeInfo *typeinfo =
+            eris_typeinfo_get_non_synthetic (ev->typeinfo);
+    lua_pushinteger (L, eris_typeinfo_is_array (typeinfo)
+                            ? eris_typeinfo_array_n_items (typeinfo) : 1);
     return 1;
 }
+
+
+#define L_BOUNDS_CHECK(vname, i, expr)                       \
+    lua_Integer vname = luaL_checkinteger (L, (i));          \
+    do {                                                     \
+        size_t max = (expr);                                 \
+        if (vname < 0) vname += max;                         \
+        if (vname <= 0 || vname > max)                       \
+            return luaL_error (L, "index %d out of bounds ", \
+                               "(effective=%d, max=%d)",     \
+                               luaL_checkinteger (L, (i)),   \
+                               vname, max);                  \
+        vname--;                                             \
+    } while (0)
+
+#define FLOAT_TO_LUA(suffix, name, ctype) \
+        case ERIS_TYPE_ ## suffix:        \
+            lua_pushnumber (L, ((ctype*) address)[index]); return 1;
+#define INTEGER_TO_LUA(suffix, name, ctype) \
+        case ERIS_TYPE_ ## suffix:          \
+            lua_pushinteger (L, ((ctype*) address)[index]); return 1;
 
 static inline int
-eris_variable_set (lua_State    *L,
-                   ErisVariable *ev,
-                   lua_Integer   index)
+cvalue_push (lua_State          *L,
+             const ErisTypeInfo *typeinfo,
+             uintptr_t           address,
+             uint32_t            index)
 {
-    CHECK_NOT_NULL (L);
-    CHECK_NOT_NULL (ev);
-
-    if (eris_typeinfo_is_const (ev->typeinfo)) {
-        return luaL_error (L, "read-only variable (%p:%s)",
-                           ev->library, ev->name);
+    CHECK_NOT_ZERO (address);
+    typeinfo = eris_typeinfo_get_non_synthetic (typeinfo);
+    switch (eris_typeinfo_type (typeinfo)) {
+        INTEGER_TYPES (INTEGER_TO_LUA)
+        FLOAT_TYPES (FLOAT_TO_LUA)
+        default: return luaL_error (L, "unsupported type");
     }
-
-    const ErisTypeInfo *typeinfo = ev->typeinfo;
-    ErisType type = eris_typeinfo_type (typeinfo);
-    while (type == ERIS_TYPE_TYPEDEF || type == ERIS_TYPE_CONST) {
-        typeinfo = eris_typeinfo_base (typeinfo);
-        type = eris_typeinfo_type (typeinfo);
-    }
-
-    uint64_t n_items = ev->n_items;
-    if (type == ERIS_TYPE_ARRAY) {
-        n_items  = eris_typeinfo_array_n_items (typeinfo);
-        typeinfo = eris_typeinfo_base (typeinfo);
-        type     = eris_typeinfo_type (typeinfo);
-    }
-
-    if (index == 0) {
-        return luaL_error (L, "0 is not a valid index");
-    }
-
-    /* Adjust index, do bounds checking. */
-    if (index < 0) index += n_items;
-    if (index <= 0 || index > n_items) {
-        return luaL_error (L, "index %d out of bounds (effective=%d, length=%d)",
-                           luaL_checkinteger (L, 2), index, n_items);
-    }
-
-    /* Convert from 1-based to 0-based indexing. */
-    index--;
-
-#define SET_INTEGER(suffix, ctype) \
-        case ERIS_TYPE_ ## suffix: \
-            ((ctype*) ev->address)[index] = (ctype) luaL_checkinteger (L, -1); \
-            break;
-#define SET_FLOAT(suffix, ctype) \
-        case ERIS_TYPE_ ## suffix: \
-            ((ctype*) ev->address)[index] = (ctype) luaL_checknumber (L, -1); \
-            break;
-
-    switch (type) {
-        INTEGER_TYPES (SET_INTEGER)
-        FLOAT_TYPES (SET_FLOAT)
-        default:
-            return luaL_error (L, "no setter for variable (%p:%s)",
-                               ev->library, ev->name);
-    }
-
-#undef SET_INTEGER
-#undef SET_FLOAT
-
-    return 1;
 }
+
+#undef INTEGER_TO_LUA
+#undef FLOAT_TO_LUA
+
+typedef struct ErisSpecial ErisSpecial;
+typedef enum {
+    ERIS_SPECIAL_NAME,
+    ERIS_SPECIAL_TYPE,
+    ERIS_SPECIAL_VALUE,
+    ERIS_SPECIAL_LIBRARY,
+} ErisSpecialCode;
+
+#include "specials.inc"
+
 
 static inline int
-eris_variable_get (lua_State    *L,
-                   ErisVariable *ev,
-                   lua_Integer   index)
+eris_variable_index_special (lua_State      *L,
+                             ErisVariable   *V,
+                             ErisSpecialCode code)
 {
     CHECK_NOT_NULL (L);
-    CHECK_NOT_NULL (ev);
+    CHECK_NOT_NULL (V);
 
-    const ErisTypeInfo *typeinfo = ev->typeinfo;
-    ErisType type = eris_typeinfo_type (typeinfo);
-    while (type == ERIS_TYPE_TYPEDEF || type == ERIS_TYPE_CONST) {
-        typeinfo = eris_typeinfo_base (typeinfo);
-        type = eris_typeinfo_type (typeinfo);
-    }
-
-    uint64_t n_items = ev->n_items;
-    if (type == ERIS_TYPE_ARRAY) {
-        n_items  = eris_typeinfo_array_n_items (typeinfo);
-        typeinfo = eris_typeinfo_base (typeinfo);
-        type     = eris_typeinfo_type (typeinfo);
-    }
-
-    /* Adjust index, do bounds checking. */
-    if (index < 0) index += n_items;
-    if (index <= 0 || index > n_items) {
-        return luaL_error (L, "index %d out of bounds (effective=%d, length=%d)",
-                           luaL_checkinteger (L, 2), index, n_items);
-    }
-    /* Convert from 1-based to 0-based indexing. */
-    index--;
-
-#define GET_INTEGER(suffix, ctype) \
-        case ERIS_TYPE_ ## suffix: \
-            lua_pushinteger (L, ((ctype*) ev->address)[index]); \
+    switch (code) {
+        case ERIS_SPECIAL_NAME:
+            lua_pushstring (L, V->name);
             break;
-#define GET_FLOAT(suffix, ctype) \
-        case ERIS_TYPE_ ## suffix: \
-            lua_pushnumber (L, ((ctype*) ev->address)[index]); \
+        case ERIS_SPECIAL_TYPE:
+            eris_typeinfo_push_userdata (L, V->typeinfo);
             break;
-
-    switch (type) {
-        INTEGER_TYPES (GET_INTEGER)
-        FLOAT_TYPES (GET_FLOAT)
-        default:
-            return luaL_error (L, "no getter for variable (%p:%s)",
-                               ev->library, ev->name);
+        case ERIS_SPECIAL_VALUE:
+            return cvalue_push (L, V->typeinfo, (uintptr_t) V->address, 0);
+        case ERIS_SPECIAL_LIBRARY:
+            eris_library_push_userdata (L, V->library);
+            break;
     }
-
-#undef GET_INTEGER
-#undef GET_FLOAT
     return 1;
 }
+
 
 static int
 eris_variable_index (lua_State *L)
 {
-    ErisVariable *ev = to_eris_variable (L);
-    if (lua_isinteger (L, 2)) {
-        /* Handle index-based fields. */
-        return eris_variable_get (L, ev, luaL_checkinteger (L, 2));
+    ErisVariable *V = to_eris_variable (L);
+    const ErisTypeInfo *T = eris_typeinfo_get_non_synthetic (V->typeinfo);
+    if (!T) return luaL_error (L, "cannot get actual type");
+
+    if (lua_type (L, 2) == LUA_TSTRING) {
+        size_t length;
+        const char *name = lua_tolstring (L, 2, &length);
+        const ErisSpecial *s = eris_special_lookup (name, length);
+        if (s) return eris_variable_index_special (L, V, s->code);
     }
 
-    const char *field = lua_tostring (L, 2);
-    if (field[0] == '_' && field[1] == '_') {
-        /* Handle Eris internal fields. */
-        if (!strcmp ("name", field + 2)) {
-            lua_pushstring (L, ev->name);
-        } else if (!strcmp ("type", field + 2)) {
-            eris_typeinfo_push_userdata (L, ev->typeinfo);
-        } else if (!strcmp ("library", field + 2)) {
-            eris_library_push_userdata (L, ev->library);
-        } else if (!strcmp ("value", field + 2)) {
-            return eris_variable_get (L, ev, 1);
-        } else {
-            return luaL_error (L, "invalid field '%s'", field);
+    switch (eris_typeinfo_type (T)) {
+        case ERIS_TYPE_ARRAY: {
+            L_BOUNDS_CHECK (index, 2, eris_typeinfo_array_n_items (T));
+            return cvalue_push (L, eris_typeinfo_base (T),
+                                (uintptr_t) V->address, index);
         }
-        return 1;
-    } else {
-        /* TODO: Implement struct named fields. */
-        if (eris_typeinfo_type (ev->typeinfo) != ERIS_TYPE_STRUCT) {
-            return luaL_error (L, "type '%s' is not a struct",
-                               eris_typeinfo_name (ev->typeinfo));
+        case ERIS_TYPE_STRUCT: {
+            const ErisTypeInfoMember *member;
+            if (lua_isinteger (L, 2)) {
+                L_BOUNDS_CHECK (index, 2, eris_typeinfo_struct_n_members (T));
+                member = eris_typeinfo_struct_const_member (T, index);
+            } else {
+                const char *name = luaL_checkstring (L, 2);
+                member = eris_typeinfo_struct_const_named_member (T, name);
+                if (!member) {
+                    return luaL_error (L, "%s: no such struct member", name);
+                }
+            }
+            return cvalue_push (L, member->typeinfo,
+                                (uintptr_t) V->address + member->offset, 0);
         }
-        return luaL_error (L, "struct fields are not implemented");
+        default:
+            return luaL_error (L, "not indexable");
+    }
+}
+
+
+#define FLOAT_FROM_LUA(suffix, name, ctype) \
+        case ERIS_TYPE_ ## suffix:          \
+            ((ctype*) address)[index] = (ctype) luaL_checknumber (L, lindex); return 0;
+#define INTEGER_FROM_LUA(suffix, name, ctype) \
+        case ERIS_TYPE_ ## suffix:            \
+            ((ctype*) address)[index] = (ctype) luaL_checkinteger (L, lindex); return 0;
+
+static inline int
+cvalue_get (lua_State          *L,
+            int                 lindex,
+            const ErisTypeInfo* typeinfo,
+            uintptr_t           address,
+            uint32_t            index)
+{
+    CHECK_NOT_ZERO (address);
+    typeinfo = eris_typeinfo_get_non_synthetic (typeinfo);
+    switch (eris_typeinfo_type (typeinfo)) {
+        INTEGER_TYPES (INTEGER_FROM_LUA)
+        FLOAT_TYPES (FLOAT_FROM_LUA)
+        default: return luaL_error (L, "unsupported type");
+    }
+}
+
+#undef INTEGER_FROM_LUA
+#undef FLOAT_FROM_LUA
+
+
+static inline int
+eris_variable_newindex_special (lua_State      *L,
+                                int             lindex,
+                                ErisVariable   *V,
+                                ErisSpecialCode code)
+{
+    CHECK_NOT_NULL (L);
+    CHECK_NOT_NULL (V);
+
+    switch (code) {
+        case ERIS_SPECIAL_VALUE:
+            return cvalue_get (L, lindex, V->typeinfo, (uintptr_t) V->address, 0);
+        case ERIS_SPECIAL_NAME:
+            return luaL_error (L, "__name is read-only");
+        case ERIS_SPECIAL_TYPE:
+            return luaL_error (L, "__type is read-only");
+        case ERIS_SPECIAL_LIBRARY:
+            return luaL_error (L, "__library is read-only");
     }
 }
 
@@ -894,9 +909,49 @@ eris_variable_index (lua_State *L)
 static int
 eris_variable_newindex (lua_State *L)
 {
-    ErisVariable *ev = to_eris_variable (L);
-    lua_Integer index = luaL_checkinteger (L, 2);
-    return eris_variable_set (L, ev, index);
+    ErisVariable *V = to_eris_variable (L);
+
+    if (eris_typeinfo_get_const (V->typeinfo)) {
+        return luaL_error (L, "read-only variable (%p:%s)",
+                           V->library, V->name);
+    }
+
+    if (lua_type (L, 2) == LUA_TSTRING) {
+        size_t length;
+        const char *name = lua_tolstring (L, 2, &length);
+        const ErisSpecial *s = eris_special_lookup (name, length);
+        if (s) return eris_variable_newindex_special (L, 3, V, s->code);
+    }
+
+    const ErisTypeInfo *T = eris_typeinfo_get_non_synthetic (V->typeinfo);
+    if (!T) return luaL_error (L, "cannot get actual type");
+
+    switch (eris_typeinfo_type (T)) {
+        case ERIS_TYPE_ARRAY: {
+            L_BOUNDS_CHECK (index, 2, eris_typeinfo_array_n_items (T));
+            return cvalue_get (L, 3, eris_typeinfo_base (T),
+                               (uintptr_t) V->address, index);
+        }
+        case ERIS_TYPE_STRUCT: {
+            const ErisTypeInfoMember *member;
+            if (lua_isinteger (L, 2)) {
+                L_BOUNDS_CHECK (index, 2, eris_typeinfo_struct_n_members (T));
+                member = eris_typeinfo_struct_const_member (T, index);
+            } else {
+                const char *name = luaL_checkstring (L, 2);
+                member = eris_typeinfo_struct_const_named_member (T, name);
+                if (!member) {
+                    return luaL_error (L, "%s: no such struct member", name);
+                }
+            }
+            return cvalue_get (L, 3, member->typeinfo,
+                               (uintptr_t) V->address + member->offset, 0);
+        }
+        default:
+            return luaL_error (L, "not indexable");
+    }
+
+    return 0;
 }
 
 
@@ -1354,9 +1409,9 @@ eris_library_build_base_type_typeinfo (ErisLibrary *library,
                                  d_error))
             return NULL;
 
-    ErisType type = ERIS_TYPE_NONE;
+    ErisType type;
 
-#define TYPEINFO_ITEM(suffix, ctype)     \
+#define TYPEINFO_ITEM(suffix, _, ctype)  \
         case sizeof (ctype):             \
             type = ERIS_TYPE_ ## suffix; \
             break;
@@ -1373,10 +1428,10 @@ eris_library_build_base_type_typeinfo (ErisLibrary *library,
         case DW_ATE_unsigned_char:
             switch (d_byte_size) { INTEGER_U_TYPES (TYPEINFO_ITEM) }
             break;
+        default:
+            return NULL;
     }
 #undef TYPEINFO_ITEM
-
-    CHECK_UINT_NE (ERIS_TYPE_NONE, type);
 
     Dwarf_Error d_name_error = 0;
     const char* name = die_get_string_attribute (library,
@@ -1400,7 +1455,7 @@ eris_library_build_base_type_typeinfo (ErisLibrary *library,
         }
     }
 
-    return eris_typeinfo_new_base_type (type, name);
+    return eris_typeinfo_new_base (type, name);
 }
 
 
@@ -1526,7 +1581,7 @@ eris_library_build_array_type_typeinfo (ErisLibrary *library,
 
     TRACE ("new typeinfo: %s[%" PRIu64 "]\n",
            eris_typeinfo_name (base), n_items);
-    return eris_typeinfo_new_array_type (base, n_items);
+    return eris_typeinfo_new_array (base, n_items);
 }
 
 

@@ -15,5 +15,5 @@ assert.Equal(42, variable.__value)
 assert.Equal(libtest, variable.__library)
 
 -- Read-only variables cannot be assigned to.
-assert.Error(function () variable[1] = 100 end)
+assert.Error(function () variable.__value = 100 end)
 assert.Equal(42, variable.__value)
