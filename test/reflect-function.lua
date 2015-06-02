@@ -10,5 +10,5 @@ local libtest = require("eris").load("libtest")
 local func = libtest.add
 assert.Not.Nil(func)
 assert.Callable(func)
-assert.Equal("add", func:name())
-assert.Equal(libtest, func:library())
+assert.Equal("add", func.__name)
+assert.Equal(libtest, func.__library)

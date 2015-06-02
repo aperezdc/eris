@@ -32,8 +32,18 @@
 #endif /* !ERIS_LIB_SUFFIX */
 
 
-typedef struct _ErisLibrary  ErisLibrary;
+typedef struct ErisSpecial ErisSpecial;
+typedef enum {
+    ERIS_SPECIAL_NAME,
+    ERIS_SPECIAL_TYPE,
+    ERIS_SPECIAL_VALUE,
+    ERIS_SPECIAL_LIBRARY,
+} ErisSpecialCode;
 
+#include "specials.inc"
+
+
+typedef struct _ErisLibrary  ErisLibrary;
 
 /*
  * Data needed for each library loaded by "eris.load()".
@@ -813,18 +823,27 @@ eris_function_tostring (lua_State *L)
 }
 
 static int
-eris_function_name (lua_State *L)
+eris_function_index (lua_State *L)
 {
     ErisFunction *ef = to_eris_function (L);
-    lua_pushstring (L, ef->name);
-    return 1;
-}
+    size_t length;
+    const char *name = luaL_checklstring (L, 2, &length);
+    const ErisSpecial *s = eris_special_lookup (name, length);
+    if (!s) return luaL_error (L, "invalid field '%s'", name);
 
-static int
-eris_function_library (lua_State *L)
-{
-    ErisFunction *ef = to_eris_function (L);
-    eris_library_push_userdata (L, ef->library);
+    switch (s->code) {
+        case ERIS_SPECIAL_NAME:
+            lua_pushstring (L, ef->name);
+            break;
+        case ERIS_SPECIAL_TYPE:
+            eris_typeinfo_push_userdata (L, ef->return_typeinfo);
+            break;
+        case ERIS_SPECIAL_LIBRARY:
+            eris_library_push_userdata (L, ef->library);
+            break;
+        case ERIS_SPECIAL_VALUE:
+            return luaL_error (L, "invalid field '%s'", name);
+    }
     return 1;
 }
 
@@ -833,8 +852,7 @@ static const luaL_Reg eris_function_methods[] = {
     { "__call",     eris_function_call     },
     { "__gc",       eris_function_gc       },
     { "__tostring", eris_function_tostring },
-    { "name",       eris_function_name     },
-    { "library",    eris_function_library  },
+    { "__index",    eris_function_index    },
     { NULL, NULL }
 };
 
@@ -942,16 +960,6 @@ cvalue_push (lua_State          *L,
 
 #undef INTEGER_TO_LUA
 #undef FLOAT_TO_LUA
-
-typedef struct ErisSpecial ErisSpecial;
-typedef enum {
-    ERIS_SPECIAL_NAME,
-    ERIS_SPECIAL_TYPE,
-    ERIS_SPECIAL_VALUE,
-    ERIS_SPECIAL_LIBRARY,
-} ErisSpecialCode;
-
-#include "specials.inc"
 
 
 static inline int
