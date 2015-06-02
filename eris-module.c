@@ -315,7 +315,7 @@ void eris_library_free (ErisLibrary *el)
     if (el->d_types)
         dwarf_pubtypes_dealloc (el->d_debug, el->d_types, el->d_num_types);
 
-    Dwarf_Error d_error = 0;
+    Dwarf_Error d_error = DW_DLE_NE;
     dwarf_finish (el->d_debug, &d_error);
 
     close (el->fd);
@@ -664,7 +664,7 @@ make_variable_wrapper (lua_State   *L,
                        Dwarf_Die    d_die,
                        Dwarf_Half   d_tag)
 {
-    Dwarf_Error d_error = 0;
+    Dwarf_Error d_error = DW_DLE_NE;
     Dwarf_Off d_offset =
             eris_library_get_die_ref_attribute_offset (library,
                                                        d_die,
@@ -701,7 +701,7 @@ eris_library_index (lua_State *L)
         goto return_error;
     }
 
-    Dwarf_Error d_error = 0;
+    Dwarf_Error d_error = DW_DLE_NE;
     Dwarf_Die d_die = lookup_die (e, name, &d_error);
     if (!d_die) {
         return luaL_error (L, "could not look up DWARF debug information "
@@ -1204,7 +1204,7 @@ eris_load (lua_State *L)
 
     Dwarf_Handler d_error_handler = 0;
     Dwarf_Ptr d_error_argument = 0;
-    Dwarf_Error d_error;
+    Dwarf_Error d_error = DW_DLE_NE;
     Dwarf_Debug d_debug;
 
     if (dwarf_init (fd,
@@ -1225,7 +1225,7 @@ eris_load (lua_State *L)
                            &d_globals,
                            &d_num_globals,
                            &d_error) != DW_DLV_OK) {
-        Dwarf_Error d_finish_error = 0;
+        Dwarf_Error d_finish_error = DW_DLE_NE;
         dwarf_finish (d_debug, &d_finish_error);
         close (fd);
         dlclose (dl);
@@ -1236,7 +1236,7 @@ eris_load (lua_State *L)
 #if ERIS_TRACE
     for (Dwarf_Signed i = 0; i < d_num_globals; i++) {
         char *name = NULL;
-        Dwarf_Error d_name_error = 0;
+        Dwarf_Error d_name_error = DW_DLE_NE;
         if (dwarf_globname (d_globals[i], &name, &d_name_error) == DW_DLV_OK) {
             TRACE ("-- [%li] %s\n", (long) i, name);
             dwarf_dealloc (d_debug, name, DW_DLA_STRING);
@@ -1252,7 +1252,7 @@ eris_load (lua_State *L)
                             &d_types,
                             &d_num_types,
                             &d_error) != DW_DLV_OK) {
-        Dwarf_Error d_finish_error = 0;
+        Dwarf_Error d_finish_error = DW_DLE_NE;
         dwarf_globals_dealloc (d_debug, d_globals, d_num_globals);
         dwarf_finish (d_debug, &d_finish_error);
         close (fd);
@@ -1264,7 +1264,7 @@ eris_load (lua_State *L)
 #if ERIS_TRACE
     for (Dwarf_Signed i = 0; i < d_num_types; i++) {
         char *name = NULL;
-        Dwarf_Error d_name_error = 0;
+        Dwarf_Error d_name_error = DW_DLE_NE;
         if (dwarf_pubtypename (d_types[i], &name, &d_name_error) == DW_DLV_OK) {
             TRACE ("-- [%li] %s\n", (long) i, name);
             dwarf_dealloc (d_debug, name, DW_DLA_STRING);
@@ -1297,7 +1297,7 @@ eris_type (lua_State *L)
     ErisLibrary *el = to_eris_library (L, 1);
     const char *name = luaL_checkstring (L, 2);
 
-    Dwarf_Error d_error = 0;
+    Dwarf_Error d_error = DW_DLE_NE;
     Dwarf_Off d_offset = eris_library_get_tue_offset (el, name, &d_error);
     if (d_offset == DW_DLV_BADOFFSET) {
         return luaL_error (L, "%s: could not look up DWARF TUE offset "
@@ -1353,7 +1353,7 @@ eris_typeof (lua_State *L)
         } else {
             const char *name = luaL_checkstring (L, 1);
             for (ErisLibrary *el = library_list; el; el = el->next) {
-                Dwarf_Error d_error = 0;
+                Dwarf_Error d_error = DW_DLE_NE;
                 Dwarf_Off d_offset = eris_library_get_tue_offset (el,
                                                                   name,
                                                                   &d_error);
@@ -1469,7 +1469,7 @@ lookup_die (ErisLibrary *el,
      */
     for (Dwarf_Signed i = 0; i < el->d_num_globals; i++) {
         char *global_name;
-        Dwarf_Error d_globname_error = 0;
+        Dwarf_Error d_globname_error = DW_DLE_NE;
         if (dwarf_globname (el->d_globals[i],
                             &global_name,
                             &d_globname_error) != DW_DLV_OK) {
@@ -1604,7 +1604,7 @@ eris_library_build_base_type_typeinfo (ErisLibrary *library,
     }
 #undef TYPEINFO_ITEM
 
-    Dwarf_Error d_name_error = 0;
+    Dwarf_Error d_name_error = DW_DLE_NE;
     const char* name = die_get_string_attribute (library,
                                                  d_type_die,
                                                  DW_AT_name,
@@ -1612,7 +1612,7 @@ eris_library_build_base_type_typeinfo (ErisLibrary *library,
     if (!name) {
         Dwarf_Off d_global_offset = 0;
         Dwarf_Off d_local_offset = 0;
-        Dwarf_Error d_offsets_error = 0;
+        Dwarf_Error d_offsets_error = DW_DLE_NE;
         if (dwarf_die_offsets (d_type_die,
                                &d_global_offset,
                                &d_local_offset,
@@ -2013,7 +2013,7 @@ eris_library_get_tue_offset (ErisLibrary *library,
      */
     for (Dwarf_Signed i = 0; i < library->d_num_types; i++) {
         char *type_name;
-        Dwarf_Error d_typename_error = 0;
+        Dwarf_Error d_typename_error = DW_DLE_NE;
         if (dwarf_pubtypename (library->d_types[i],
                                &type_name,
                                &d_typename_error) != DW_DLV_OK) {
