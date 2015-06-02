@@ -411,6 +411,8 @@ else
 end
 
 
+table.sort(tests, function (a, b) return a.name < b.name end)
+
 if options.list then
 	for _, test in ipairs(tests) do
 		print(test.name)
