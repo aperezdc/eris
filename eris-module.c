@@ -231,7 +231,9 @@ typedef struct {
 
 typedef struct {
     ERIS_COMMON_FIELDS;
-    Dwarf_Die d_die;
+    const ErisTypeInfo *return_typeinfo;
+    uint32_t            n_param;
+    const ErisTypeInfo *param_types[];
 } ErisFunction;
 
 typedef struct {
@@ -398,20 +400,10 @@ l_eris_typeinfo_call (lua_State *L)
 }
 
 
-static int
-make_function_wrapper (lua_State   *L,
-                       ErisLibrary *library,
-                       void        *address,
-                       const char  *name,
-                       Dwarf_Die    d_die,
-                       Dwarf_Half   d_tag)
+static inline const char*
+dw_errmsg (Dwarf_Error d_error)
 {
-    ErisFunction *ef = lua_newuserdata (L, sizeof (ErisFunction));
-    eris_symbol_init ((ErisSymbol*) ef, library, address, name);
-    ef->d_die = d_die;
-    luaL_setmetatable (L, ERIS_FUNCTION);
-    TRACE ("new ErisFunction* at %p (%p:%s)\n", ef, library, name);
-    return 1;
+    return d_error ? dwarf_errmsg (d_error) : "no libdwarf error";
 }
 
 
@@ -437,6 +429,163 @@ eris_library_get_die_ref_attribute_offset (ErisLibrary *library,
                                          d_error) == DW_DLV_OK;
     dwarf_dealloc (library->d_debug, d_attr, DW_DLA_ATTR);
     return success ? d_offset : DW_DLV_BADOFFSET;
+}
+
+
+/*
+ * A function like this:
+ *
+ *   int add(int a, int b);
+ *
+ * Becomes:
+ *
+ *   DW_TAG_subprogram
+ *     DW_AT_type                 <die-ref-offset> (return type)
+ *     DW_TAG_formal_parameter
+ *       DW_AT_location           <opcodes>
+ *       DW_AT_name               a
+ *       DW_AT_type               <die-ref-offset>
+ *     DW_TAG_formal_parameter
+ *       DW_AT_location           <opcodes>
+ *       DW_AT_name               b
+ *       DW_AT_type               <die-ref-offset>
+ */
+static ErisFunction*
+function_parameters (lua_State          *L,
+                     ErisLibrary        *library,
+                     Dwarf_Die           d_param_die,
+                     Dwarf_Error        *d_error,
+                     const ErisTypeInfo *return_typeinfo,
+                     void               *func_address,
+                     const char         *func_name,
+                     uint32_t            n_param)
+{
+    CHECK_NOT_NULL (library);
+    CHECK_NOT_NULL (d_param_die);
+    CHECK_NOT_NULL (d_error);
+    CHECK_NOT_NULL (return_typeinfo);
+
+    Dwarf_Half d_tag;
+    if (dwarf_tag (d_param_die, &d_tag, d_error) != DW_DLV_OK) {
+        TRACE ("%s(%d): cannot get DAWRF DIE tag (%s)\n",
+               func_name, n_param, dw_errmsg (*d_error));
+        return NULL;
+    }
+
+    const ErisTypeInfo *typeinfo = NULL;
+    if (d_tag == DW_TAG_formal_parameter) {
+        Dwarf_Off d_type_offset =
+                eris_library_get_die_ref_attribute_offset (library,
+                                                           d_param_die,
+                                                           DW_AT_type,
+                                                           d_error);
+        if (d_type_offset == DW_DLV_BADOFFSET) {
+            TRACE ("%s(%d): cannot get DWARF DW_AT_type offset (%s)\n",
+                   func_name, n_param, dw_errmsg (*d_error));
+            return NULL;
+        }
+
+        if (!(typeinfo = eris_library_lookup_type (library,
+                                                   d_type_offset,
+                                                   d_error))) {
+            TRACE ("%s(%d): cannot get type information (%s)\n",
+                   func_name, n_param, dw_errmsg (*d_error));
+            return NULL;
+        }
+
+        TRACE ("%s(%d): typeinfo %p\n", func_name, n_param, typeinfo);
+        n_param++;
+    }
+
+    /*
+     * Advance to the next item.
+     */
+    Dwarf_Die d_next_param_die = NULL;
+    int status = dwarf_siblingof (library->d_debug,
+                                  d_param_die,
+                                  &d_next_param_die,
+                                  d_error);
+
+    if (status == DW_DLV_NO_ENTRY) {
+        /* No more entries. Create a ErisFunction and fill-in the paramtype. */
+        const size_t payload = sizeof (ErisTypeInfo*) * n_param;
+        ErisFunction *ef = lua_newuserdata (L, sizeof (ErisFunction) + payload);
+        eris_symbol_init ((ErisSymbol*) ef, library, func_address, func_name);
+        ef->return_typeinfo          = return_typeinfo;
+        ef->n_param                  = n_param;
+        ef->param_types[n_param - 1] = typeinfo;
+        luaL_setmetatable (L, ERIS_FUNCTION);
+        return ef;
+    }
+
+    if (status == DW_DLV_OK) {
+        ErisFunction *result = function_parameters (L,
+                                                    library,
+                                                    d_next_param_die,
+                                                    d_error,
+                                                    return_typeinfo,
+                                                    func_address,
+                                                    func_name,
+                                                    n_param);
+        dwarf_dealloc (library->d_debug, d_next_param_die, DW_DLA_DIE);
+        if (result) result->param_types[n_param - 1] = typeinfo;
+        return result;
+    }
+
+    CHECK_INT_EQ (DW_DLV_ERROR, status);
+    TRACE ("%s(%d): cannot get param DIE sibling (%s)\n",
+           func_name, n_param, dw_errmsg (*d_error));
+    return NULL;
+}
+
+
+static int
+make_function_wrapper (lua_State   *L,
+                       ErisLibrary *library,
+                       void        *address,
+                       const char  *name,
+                       Dwarf_Die    d_die,
+                       Dwarf_Half   d_tag)
+{
+    Dwarf_Error d_error = DW_DLE_NE;
+
+    Dwarf_Die d_child_die = NULL;
+    if (dwarf_child (d_die, &d_child_die, &d_error) != DW_DLV_OK) {
+        return luaL_error (L, "%s: cannot obtain child DIE (%s)\n",
+                           name, dw_errmsg (d_error));
+    }
+
+    Dwarf_Off d_return_type_offset =
+            eris_library_get_die_ref_attribute_offset (library,
+                                                       d_die,
+                                                       DW_AT_type,
+                                                       &d_error);
+    if (d_return_type_offset == DW_DLV_BADOFFSET) {
+        return luaL_error (L, "%s: cannot get DWARF DIE DW_AT_type offset (%s)\n",
+                           name, dw_errmsg (d_error));
+    }
+
+    const ErisTypeInfo *return_typeinfo =
+            eris_library_lookup_type (library, d_return_type_offset, &d_error);
+    if (!return_typeinfo) {
+        return luaL_error (L, "%s: cannot get return type information (%s)\n",
+                           name, dw_errmsg (d_error));
+    }
+
+    ErisFunction *ef = function_parameters (L,
+                                            library,
+                                            d_child_die,
+                                            &d_error,
+                                            return_typeinfo,
+                                            address,
+                                            name,
+                                            0);
+    if (!ef) {
+        return luaL_error (L, "%s: cannot get type information for "
+                           "parameters (%s)\n", name, dw_errmsg (d_error));
+    }
+    TRACE ("new ErisFunction* at %p (%p:%s)\n", ef, library, name);
+    return 1;
 }
 
 
@@ -473,13 +622,6 @@ die_get_uint_attribute (ErisLibrary    *library,
     bool success = dwarf_formudata (d_attr, d_result, d_error) == DW_DLV_OK;
     dwarf_dealloc (library->d_debug, d_attr, DW_DLA_ATTR);
     return success;
-}
-
-
-static inline const char*
-dw_errmsg (Dwarf_Error d_error)
-{
-    return d_error ? dwarf_errmsg (d_error) : "no libdwarf error";
 }
 
 
@@ -658,10 +800,6 @@ eris_function_gc (lua_State *L)
 {
     ErisFunction *ef = to_eris_function (L);
     TRACE ("%p (%p:%s)\n", ef, ef->library, ef->name);
-
-    dwarf_dealloc (ef->library->d_debug, ef->d_die, DW_DLA_DIE);
-    ef->d_die = 0;
-
     eris_symbol_free ((ErisSymbol*) ef);
     return 0;
 }
