@@ -1981,16 +1981,6 @@ eris_library_build_structure_type_typeinfo (ErisLibrary *library,
     CHECK_NOT_NULL (d_type_die);
     CHECK_NOT_NULL (d_error);
 
-    Dwarf_Unsigned d_byte_size;
-    if (!die_get_uint_attribute (library,
-                                 d_type_die,
-                                 DW_AT_byte_size,
-                                 &d_byte_size,
-                                 d_error)) {
-        TRACE ("cannot get TUE DW_AT_byte_size (%s)\n", dw_errmsg (*d_error));
-        return NULL;
-    }
-
     *d_error = DW_DLE_NE;
     const char *name = die_get_string_attribute (library,
                                                  d_type_die,
@@ -1999,6 +1989,15 @@ eris_library_build_structure_type_typeinfo (ErisLibrary *library,
     if (*d_error != DW_DLE_NE) {
         TRACE ("cannot get TUE DW_AT_name (%s)\n", dw_errmsg (*d_error));
         return NULL;
+    }
+
+    Dwarf_Unsigned d_byte_size;
+    if (!die_get_uint_attribute (library,
+                                 d_type_die,
+                                 DW_AT_byte_size,
+                                 &d_byte_size,
+                                 d_error)) {
+        return eris_typeinfo_new_struct (name, 0, 0);
     }
 
     Dwarf_Die d_child_die = NULL;

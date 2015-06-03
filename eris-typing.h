@@ -112,6 +112,7 @@ extern bool        eris_typeinfo_equal (const ErisTypeInfo *a,
 extern uint32_t    eris_typeinfo_sizeof (const ErisTypeInfo *typeinfo);
 extern uint64_t    eris_typeinfo_array_n_items (const ErisTypeInfo* typeinfo);
 extern uint32_t    eris_typeinfo_struct_n_members (const ErisTypeInfo *typeinfo);
+extern bool        eris_typeinfo_struct_is_opaque (const ErisTypeInfo *typeinfo);
 
 extern bool eris_typeinfo_get_const (const ErisTypeInfo *typeinfo);
 extern const ErisTypeInfo* eris_typeinfo_get_struct (const ErisTypeInfo *typeinfo);

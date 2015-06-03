@@ -277,6 +277,17 @@ eris_typeinfo_struct_n_members (const ErisTypeInfo *typeinfo)
 }
 
 
+bool
+eris_typeinfo_struct_is_opaque (const ErisTypeInfo *typeinfo)
+{
+    CHECK_NOT_NULL (typeinfo);
+    CHECK_UINT_EQ (ERIS_TYPE_STRUCT, typeinfo->type);
+
+    return typeinfo->ti_struct.n_members == 0
+        && typeinfo->ti_struct.size == 0;
+}
+
+
 uint64_t
 eris_typeinfo_array_n_items (const ErisTypeInfo *typeinfo)
 {
