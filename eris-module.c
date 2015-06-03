@@ -51,6 +51,8 @@ typedef struct _ErisLibrary  ErisLibrary;
 struct _ErisLibrary {
     REF_COUNTER;
 
+    char         *path;
+
     int           fd;
     void         *dl;
 
@@ -324,6 +326,7 @@ void eris_library_free (ErisLibrary *el)
     Dwarf_Error d_error = DW_DLE_NE;
     dwarf_finish (el->d_debug, &d_error);
 
+    free (el->path);
     close (el->fd);
     dlclose (el->dl);
 
@@ -1195,6 +1198,20 @@ eris_load (lua_State *L)
     }
     TRACE ("found %s -> %s\n", name, path);
 
+    /*
+     * If the library at the resolved path has been already loaded, return
+     * a reference to the existing one instead of opening it multiple times.
+     */
+    ErisLibrary *library = NULL;
+    for (library = library_list; library; library = library->next) {
+        if (string_equal (path, library->path)) {
+            TRACE_PTR (+, ErisLibrary, library, "");
+            TRACE ("> [%s]\n", library->path);
+            eris_library_push_userdata (L, library);
+            return 1;
+        }
+    }
+
     void *dl = dlopen (path, dlopen_flags);
     if (!dl) {
         return luaL_error (L, "could not link library '%s' (%s)",
@@ -1283,6 +1300,7 @@ eris_load (lua_State *L)
     ErisLibrary *el = calloc (1, sizeof (ErisLibrary));
     el->fd = fd;
     el->dl = dl;
+    el->path = strdup (path);
     el->d_debug = d_debug;
     el->d_globals = d_globals;
     el->d_num_globals = d_num_globals;
