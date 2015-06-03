@@ -9,6 +9,8 @@
 #define ERIS_UTIL_H
 
 #include <inttypes.h>
+#include <stdbool.h>
+#include <string.h>
 
 
 #define LENGTH_OF(array) \
@@ -185,5 +187,16 @@ extern void eris_runtime_check_failed (const char *file,
 #define REF_COUNTER_DECLARE_FUNCTIONS(type, prefix, ...) \
     __VA_ARGS__ bool  prefix ## _unref (type*);          \
     __VA_ARGS__ type* prefix ## _ref (type*)
+
+
+/*
+ * Miscellaneous utilities.
+ */
+static inline bool
+string_equal (const char *a,
+              const char *b)
+{
+    return (a == b) || (a && b && strcmp (a, b) == 0);
+}
 
 #endif /* !ERIS_UTIL_H */

@@ -368,13 +368,6 @@ eris_typeinfo_base (const ErisTypeInfo *typeinfo)
 }
 
 
-static inline bool
-string_eq (const char *a, const char *b)
-{
-    return (a == b) || (a && b && strcmp (a, b) == 0);
-}
-
-
 bool
 eris_typeinfo_equal (const ErisTypeInfo *a,
                      const ErisTypeInfo *b)
@@ -394,7 +387,7 @@ eris_typeinfo_equal (const ErisTypeInfo *a,
                                         b->ti_pointer.typeinfo);
 
         case ERIS_TYPE_TYPEDEF:
-            return string_eq (a->ti_typedef.name, b->ti_typedef.name)
+            return string_equal (a->ti_typedef.name, b->ti_typedef.name)
                 && eris_typeinfo_equal (a->ti_typedef.typeinfo,
                                         b->ti_typedef.typeinfo);
 
@@ -410,13 +403,13 @@ eris_typeinfo_equal (const ErisTypeInfo *a,
         case ERIS_TYPE_STRUCT:
             if (a->ti_struct.size != b->ti_struct.size ||
                 a->ti_struct.n_members != b->ti_struct.n_members ||
-                !string_eq (a->ti_struct.name, b->ti_struct.name)) {
+                !string_equal (a->ti_struct.name, b->ti_struct.name)) {
                     return false;
             }
             /* Check struct members. */
             for (uint32_t i = 0; i < a->ti_struct.n_members; i++) {
-                if (!string_eq (a->ti_struct.members[i].name,
-                                b->ti_struct.members[i].name) ||
+                if (!string_equal (a->ti_struct.members[i].name,
+                                   b->ti_struct.members[i].name) ||
                     !eris_typeinfo_equal (a->ti_struct.members[i].typeinfo,
                                           b->ti_struct.members[i].typeinfo))
                         return false;
@@ -425,7 +418,7 @@ eris_typeinfo_equal (const ErisTypeInfo *a,
 
         default:
             return a->ti_base.size == b->ti_base.size
-                && string_eq (a->ti_base.name, b->ti_base.name);
+                && string_equal (a->ti_base.name, b->ti_base.name);
     }
 }
 
@@ -439,7 +432,7 @@ eris_typeinfo_struct_const_named_member (const ErisTypeInfo *typeinfo,
     CHECK_NOT_NULL (name);
 
     for (uint32_t i = 0; i < typeinfo->ti_struct.n_members; i++)
-        if (string_eq (name, typeinfo->ti_struct.members[i].name))
+        if (string_equal (name, typeinfo->ti_struct.members[i].name))
             return &typeinfo->ti_struct.members[i];
     return NULL;
 }
