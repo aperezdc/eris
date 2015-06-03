@@ -73,6 +73,12 @@ static const char ERIS_LIBRARY[]  = "org.perezdecastro.eris.Library";
 static void eris_library_free (ErisLibrary*);
 REF_COUNTER_FUNCTIONS (ErisLibrary, eris_library, static inline)
 
+static inline const ErisTypeInfo*
+eris_library_fetch_die_type_ref_cached (ErisLibrary *library,
+                                        Dwarf_Die    d_die,
+                                        Dwarf_Half   d_tag,
+                                        Dwarf_Error *d_error);
+
 
 static inline void
 eris_library_push_userdata (lua_State *L, ErisLibrary *el)
@@ -417,7 +423,7 @@ dw_errmsg (Dwarf_Error d_error)
 }
 
 
-static Dwarf_Off
+static inline Dwarf_Off
 eris_library_get_die_ref_attribute_offset (ErisLibrary *library,
                                            Dwarf_Die    d_die,
                                            Dwarf_Half   d_attr_tag,
@@ -1626,9 +1632,7 @@ eris_library_build_base_type_typeinfo (ErisLibrary *library,
         }
     }
 
-    const ErisTypeInfo *typeinfo = eris_typeinfo_new_base (type, name);
-    TRACE ("new ErisTypeInfo* at %p (%s)\n", typeinfo, name);
-    return typeinfo;
+    return eris_typeinfo_new_base (type, name);
 }
 
 
@@ -1667,9 +1671,63 @@ eris_library_build_typedef_typeinfo (ErisLibrary *library,
         return NULL;
     }
 
-    const ErisTypeInfo *typeinfo = eris_typeinfo_new_typedef (base, name);
-    TRACE ("new ErisTypeInfo* at %p (typedef %p %s)\n", typeinfo, base, name);
-    return typeinfo;
+    return eris_typeinfo_new_typedef (base, name);
+}
+
+
+static inline const ErisTypeInfo*
+eris_library_fetch_die_type_ref_cached (ErisLibrary *library,
+                                        Dwarf_Die    d_die,
+                                        Dwarf_Half   d_tag,
+                                        Dwarf_Error *d_error)
+{
+    CHECK_NOT_NULL (library);
+    CHECK_NOT_NULL (d_die);
+    CHECK_NOT_NULL (d_error);
+
+    Dwarf_Off d_offset =
+            eris_library_get_die_ref_attribute_offset (library,
+                                                       d_die,
+                                                       d_tag,
+                                                       d_error);
+    if (d_offset == DW_DLV_BADOFFSET) {
+        char *d_die_name;
+        if (dwarf_diename (d_die, &d_die_name, d_error) != DW_DLV_OK)
+            d_die_name = NULL;
+        TRACE ("DIE %s: cannot get DIE offset\n", d_die_name ? : "?");
+        dwarf_dealloc (library->d_debug, d_die_name, DW_DLA_STRING);
+        return NULL;
+    }
+
+    return eris_library_lookup_type (library, d_offset, d_error);
+}
+
+
+
+static const ErisTypeInfo*
+eris_library_build_pointer_type_typeinfo (ErisLibrary *library,
+                                          Dwarf_Die    d_type_die,
+                                          Dwarf_Error *d_error)
+{
+    CHECK_NOT_NULL (library);
+    CHECK_NOT_NULL (d_type_die);
+    CHECK_NOT_NULL (d_error);
+
+    const ErisTypeInfo *base =
+            eris_library_fetch_die_type_ref_cached (library,
+                                                    d_type_die,
+                                                    DW_AT_type,
+                                                    d_error);
+    if (!base) {
+        char *d_die_name;
+        if (dwarf_diename (d_type_die, &d_die_name, NULL) != DW_DLV_OK)
+            d_die_name = NULL;
+        TRACE ("%s: cannot get typeinfo\n", d_die_name ? : "?");
+        dwarf_dealloc (library->d_debug, d_die_name, DW_DLA_STRING);
+        return NULL;
+    }
+
+    return eris_typeinfo_new_pointer (base);
 }
 
 
@@ -1754,10 +1812,7 @@ eris_library_build_array_type_typeinfo (ErisLibrary *library,
         return NULL;
     }
 
-    const ErisTypeInfo *typeinfo = eris_typeinfo_new_array (base, n_items);
-    TRACE ("new ErisTypeInfo* at %p (%s[%" PRIu64 "])\n",
-           typeinfo, eris_typeinfo_name (base), n_items);
-    return typeinfo;
+    return eris_typeinfo_new_array (base, n_items);
 }
 
 
@@ -1787,9 +1842,7 @@ eris_library_build_const_type_typeinfo (ErisLibrary *library,
         return NULL;
     }
 
-    const ErisTypeInfo *typeinfo = eris_typeinfo_new_const (base);
-    TRACE ("new ErisTypeInfo* at %p (const %p)\n", typeinfo, base);
-    return typeinfo;
+    return eris_typeinfo_new_const (base);
 }
 
 
@@ -1950,14 +2003,12 @@ eris_library_build_structure_type_typeinfo (ErisLibrary *library,
     if (dwarf_child (d_type_die, &d_child_die, d_error) != DW_DLV_OK)
         return NULL;
 
-    const ErisTypeInfo *typeinfo = structure_members (library,
-                                                      d_child_die,
-                                                      d_error,
-                                                      name,
-                                                      d_byte_size,
-                                                      0);
-    TRACE ("new ErisTypeInfo* at %p (struct %s)\n", typeinfo, name);
-    return typeinfo;
+    return structure_members (library,
+                              d_child_die,
+                              d_error,
+                              name,
+                              d_byte_size,
+                              0);
 }
 
 

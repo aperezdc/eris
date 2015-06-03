@@ -129,6 +129,17 @@ eris_typeinfo_new_const (const ErisTypeInfo *base)
 
 
 ErisTypeInfo*
+eris_typeinfo_new_pointer (const ErisTypeInfo *base)
+{
+    CHECK_NOT_NULL (base);
+
+    ErisTypeInfo *typeinfo = eris_typeinfo_new (ERIS_TYPE_POINTER, 0);
+    typeinfo->ti_pointer.typeinfo = base;
+    return typeinfo;
+}
+
+
+ErisTypeInfo*
 eris_typeinfo_new_typedef (const ErisTypeInfo *base,
                            const char         *name)
 {

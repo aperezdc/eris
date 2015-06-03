@@ -90,6 +90,7 @@ typedef struct {
 
 
 extern ErisTypeInfo* eris_typeinfo_new_const   (const ErisTypeInfo *base);
+extern ErisTypeInfo* eris_typeinfo_new_pointer (const ErisTypeInfo *base);
 extern ErisTypeInfo* eris_typeinfo_new_typedef (const ErisTypeInfo *base,
                                                 const char         *name);
 extern ErisTypeInfo* eris_typeinfo_new_base    (ErisType    type,
