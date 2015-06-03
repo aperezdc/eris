@@ -40,22 +40,25 @@ eris_trace (const char *file,
             const char* fmt,
             ...)
 {
-    bool insert_space = false;
-    if (trace_items & TRACE_FILE) {
-        fprintf (trace_output, "%s:", file);
-        insert_space = true;
-    }
-    if (trace_items & TRACE_FUNC) {
-        fprintf (trace_output, "%s:", func);
-        insert_space = true;
-    }
-    if (trace_items & TRACE_LINE) {
-        fprintf (trace_output, "%u:", line);
-        insert_space = true;
-    }
-
-    if (insert_space) {
-        fputc (' ', trace_output);
+    if (*fmt == '>') {
+        fmt++;
+    } else {
+        bool insert_space = false;
+        if (trace_items & TRACE_FILE) {
+            fprintf (trace_output, "%s:", file);
+            insert_space = true;
+        }
+        if (trace_items & TRACE_FUNC) {
+            fprintf (trace_output, "%s:", func);
+            insert_space = true;
+        }
+        if (trace_items & TRACE_LINE) {
+            fprintf (trace_output, "%u:", line);
+            insert_space = true;
+        }
+        if (insert_space) {
+            fputc (' ', trace_output);
+        }
     }
 
     va_list args;

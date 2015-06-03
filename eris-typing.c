@@ -5,6 +5,7 @@
  * Distributed under terms of the MIT license.
  */
 
+#include "eris-trace.h"
 #include "eris-typing.h"
 #include "eris-util.h"
 
@@ -48,6 +49,46 @@ struct _ErisTypeInfo {
         struct TI_struct  ti_struct;
     };
 };
+
+
+#if ERIS_TRACE
+static void
+trace_tname (const ErisTypeInfo *typeinfo)
+{
+    switch (typeinfo->type) {
+        case ERIS_TYPE_POINTER:
+            trace_tname (typeinfo->ti_pointer.typeinfo);
+            TRACE (">*");
+            break;
+        case ERIS_TYPE_TYPEDEF:
+            TRACE (">typedef ");
+            trace_tname (typeinfo->ti_typedef.typeinfo);
+            TRACE ("> %s", typeinfo->ti_typedef.name);
+            break;
+        case ERIS_TYPE_CONST:
+            TRACE (">const ");
+            trace_tname (typeinfo->ti_const.typeinfo);
+            break;
+        case ERIS_TYPE_ARRAY:
+            trace_tname (typeinfo->ti_array.typeinfo);
+            TRACE (">[%lu]", (long unsigned) typeinfo->ti_array.n_items);
+            break;
+        case ERIS_TYPE_STRUCT:
+            TRACE (">struct %s", typeinfo->ti_struct.name ? : "{}");
+            break;
+        default:
+            TRACE (">%s", typeinfo->ti_base.name ? : eris_type_name (typeinfo->type));
+    }
+}
+# define TNAME(t) \
+    do { TRACE (">" WHITE); trace_tname(t); TRACE (">" NORMAL); } while (0)
+# define TTRACE(hint, t) \
+    do { TRACE (">" #hint CYAN " ErisTypeInfo" GREEN " %p" NORMAL " (", (t)); \
+         TNAME (t); TRACE (">" NORMAL ")\n"); } while (0)
+
+#else
+# define TNAME(t) ((void) 0)
+#endif
 
 
 const char*
@@ -95,6 +136,7 @@ eris_typeinfo_new (ErisType type, uint32_t n_members)
 void
 eris_typeinfo_free (ErisTypeInfo *typeinfo)
 {
+    TTRACE (<, typeinfo);
     free (typeinfo);
 }
 
@@ -113,6 +155,8 @@ eris_typeinfo_new_base (ErisType    type,
     ErisTypeInfo *typeinfo = eris_typeinfo_new (type, 0);
     typeinfo->ti_base.name = name ? name : eris_type_name (type);
     typeinfo->ti_base.size = eris_type_size (type);
+
+    TTRACE (>, typeinfo);
     return typeinfo;
 }
 
@@ -124,6 +168,8 @@ eris_typeinfo_new_const (const ErisTypeInfo *base)
 
     ErisTypeInfo *typeinfo = eris_typeinfo_new (ERIS_TYPE_CONST, 0);
     typeinfo->ti_const.typeinfo = base;
+
+    TTRACE (>, typeinfo);
     return typeinfo;
 }
 
@@ -135,6 +181,8 @@ eris_typeinfo_new_pointer (const ErisTypeInfo *base)
 
     ErisTypeInfo *typeinfo = eris_typeinfo_new (ERIS_TYPE_POINTER, 0);
     typeinfo->ti_pointer.typeinfo = base;
+
+    TTRACE (>, typeinfo);
     return typeinfo;
 }
 
@@ -149,6 +197,8 @@ eris_typeinfo_new_typedef (const ErisTypeInfo *base,
     ErisTypeInfo *typeinfo = eris_typeinfo_new (ERIS_TYPE_TYPEDEF, 0);
     typeinfo->ti_typedef.typeinfo = base,
     typeinfo->ti_typedef.name     = name;
+
+    TTRACE (>, typeinfo);
     return typeinfo;
 }
 
@@ -162,6 +212,8 @@ eris_typeinfo_new_array (const ErisTypeInfo *base,
     ErisTypeInfo *typeinfo = eris_typeinfo_new (ERIS_TYPE_ARRAY, 0);
     typeinfo->ti_array.typeinfo = base;
     typeinfo->ti_array.n_items  = n_items;
+
+    TTRACE (>, typeinfo);
     return typeinfo;
 }
 
@@ -175,6 +227,8 @@ eris_typeinfo_new_struct (const char *name,
     typeinfo->ti_struct.name      = name ? name : "<struct>";
     typeinfo->ti_struct.size      = size;
     typeinfo->ti_struct.n_members = n_members;
+
+    TTRACE (>, typeinfo);
     return typeinfo;
 }
 

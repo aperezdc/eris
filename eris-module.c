@@ -314,7 +314,7 @@ find_library (const char *name, char path[PATH_MAX])
 static
 void eris_library_free (ErisLibrary *el)
 {
-    TRACE ("%p\n", el);
+    TRACE_PTR (<, ErisLibrary, el, "\n");
 
     eris_type_cache_free (&el->type_cache);
 
@@ -346,7 +346,6 @@ static int
 eris_library_gc (lua_State *L)
 {
     ErisLibrary *el = to_eris_library (L, 1);
-    TRACE ("%p\n", el);
     eris_library_unref (el);
     return 0;
 }
@@ -407,14 +406,13 @@ l_eris_typeinfo_call (lua_State *L)
     }
 
     size_t payload = eris_typeinfo_sizeof (typeinfo);
-
     ErisVariable *ev = lua_newuserdata (L, sizeof (ErisVariable) + payload);
     eris_symbol_init ((ErisSymbol*) ev, NULL, &ev[1], NULL);
     ev->typeinfo_owned = typeinfo_owned;
     ev->typeinfo_const = typeinfo;
     memset (ev->address, 0x00, payload);
     luaL_setmetatable (L, ERIS_VARIABLE);
-    TRACE ("new ErisVariable* at %p (<Lua>)\n", ev);
+    TRACE_PTR (>, ErisVariable, ev, " (<lua>)\n");
     return 1;
 }
 
@@ -659,8 +657,11 @@ eris_variable_push_userdata (lua_State          *L,
     V->typeinfo_const = typeinfo;
     V->typeinfo_owned = false;
     luaL_setmetatable (L, ERIS_VARIABLE);
-    TRACE ("new ErisVariable* at %p (%p:%s), typeinfo %p\n",
-           V, library, name ? name : "<anonymous>", typeinfo);
+
+    TRACE_PTR (+, ErisVariable, V, " ");
+    TRACE (">type " GREEN "%p" NORMAL " (%s)\n",
+           typeinfo, name ? name : "?");
+
     return V;
 }
 
@@ -806,19 +807,17 @@ static const luaL_Reg eris_library_methods[] = {
 };
 
 
-static int
-eris_function_call (lua_State *L)
-{
-    ErisFunction *ef = to_eris_function (L);
-    TRACE ("%p (%p:%s)\n", ef, ef->library, ef->name);
-    return 0;
-}
+static int eris_function_call (lua_State *L);
+
 
 static int
 eris_function_gc (lua_State *L)
 {
     ErisFunction *ef = to_eris_function (L);
-    TRACE ("%p (%p:%s)\n", ef, ef->library, ef->name);
+
+    TRACE_PTR (<, ErisFunction, ef, "");
+    TRACE (">(%s)\n", ef->name ? ef->name : "?");
+
     eris_symbol_free ((ErisSymbol*) ef);
     return 0;
 }
@@ -872,18 +871,9 @@ eris_variable_gc (lua_State *L)
 {
     ErisVariable *ev = to_eris_variable (L);
 
-#if ERIS_TRACE
-    if (ev->library && ev->name) {
-        TRACE ("eris.variable<%s>(%p:%s)\n",
-               eris_typeinfo_name (ev->typeinfo),
-               ev->library,
-               ev->name);
-    } else {
-        TRACE ("eris.variable<%s>(%p)\n",
-               eris_typeinfo_name (ev->typeinfo),
-               ev->address);
-    }
-#endif /* ERIS_TRACE */
+    TRACE_PTR (<, ErisVariable, ev, " ");
+    TRACE (">type " GREEN "%p" NORMAL " (%s)\n",
+           ev->typeinfo, ev->name ? ev->name : "?");
 
     if (ev->typeinfo_owned) {
         eris_typeinfo_free (ev->typeinfo);
@@ -1256,7 +1246,7 @@ eris_load (lua_State *L)
     }
     TRACE ("found %ld globals\n", (long) d_num_globals);
 
-#if ERIS_TRACE
+#if ERIS_TRACE > 1
     for (Dwarf_Signed i = 0; i < d_num_globals; i++) {
         char *name = NULL;
         Dwarf_Error d_name_error = DW_DLE_NE;
@@ -1284,7 +1274,7 @@ eris_load (lua_State *L)
     }
     TRACE ("found %ld types\n", (long) d_num_types);
 
-#if ERIS_TRACE
+#if ERIS_TRACE > 1
     for (Dwarf_Signed i = 0; i < d_num_types; i++) {
         char *name = NULL;
         Dwarf_Error d_name_error = DW_DLE_NE;
@@ -1310,7 +1300,10 @@ eris_load (lua_State *L)
     library_list = el;
     eris_type_cache_init (&el->type_cache);
     eris_library_push_userdata (L, el);
-    TRACE ("new ErisLibrary* at %p\n", el);
+
+    TRACE_PTR (>, ErisLibrary, el, "");
+    TRACE ("> [%s]\n", el->path);
+
     return 1;
 }
 
@@ -1568,14 +1561,10 @@ eris_library_lookup_type (ErisLibrary *library,
 
     const ErisTypeInfo *typeinfo =
             eris_type_cache_lookup (&library->type_cache, d_offset);
-
     if (!typeinfo) {
-        TRACE ("type cache miss (%#lx)\n", (unsigned long) d_offset);
         typeinfo = eris_library_build_typeinfo (library, d_offset, d_error);
         CHECK_NOT_NULL (typeinfo);
         eris_type_cache_add (&library->type_cache, d_offset, typeinfo);
-    } else {
-        TRACE ("type cache hit (%#lx)\n", (unsigned long) d_offset);
     }
     return typeinfo;
 }

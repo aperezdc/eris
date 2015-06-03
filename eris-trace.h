@@ -55,4 +55,13 @@ extern bool eris_trace_enabled;
 # define TRACE(...)           ((void)0)
 #endif /* ERIS_TRACE */
 
+#define NORMAL "[0;0m"
+#define GREEN  "[1;32m"
+#define WHITE  "[1;1m"
+#define YELLOW "[1;31m"
+#define CYAN   "[0;36m"
+
+#define TRACE_PTR(hint, t, ptr, after) \
+    TRACE (">" #hint CYAN " " #t GREEN " %p" NORMAL after, (ptr))
+
 #endif /* !ERIS_TRACE_H */
