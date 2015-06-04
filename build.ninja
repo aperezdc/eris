@@ -75,3 +75,5 @@ ${obj}/testutil.so $
 ${obj}/eris.so
 
 default all
+
+subninja examples/build.ninja

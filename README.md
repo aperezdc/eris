@@ -72,3 +72,23 @@ For more examples, check the the `samples/` subdirectory. Documentation
 is available under the `doc/` subdirectory. Run your favourite Markdown
 processor on it to read the documentation in HTML.
 
+
+Examples
+--------
+
+Usage examples can be found in the `examples/` subdirectory.
+
+Some of the examples use third-party code, which needs to be built
+from sources. The needed sources are referenced from the repository as Git
+submodules, and the exact needed version will be fetched automatically.
+Note that the examples can only be built with Ninja at the moment:
+
+```sh
+git submodule update --recursive
+ninja examples
+```
+
+Additional dependencies for the examples:
+
+* OpenGL ES 2 (`libGLESv2` from Mesa will do).
+* GLFW3

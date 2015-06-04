@@ -1,0 +1,9 @@
+# NanoVG module.
+build ${obj}/nanovg.o       : cc examples/nanovg/src/nanovg.c
+build ${obj}/nanovg-utils.o : cc examples/nanovg-utils.c
+build ${obj}/nanovg.so      : ld ${obj}/nanovg.o ${obj}/nanovg-utils.o
+  ldflags = ${ldflags} -shared
+  libs = -lGLESv2 -lglfw
+
+build examples : phony $
+      ${obj}/nanovg.so
