@@ -480,11 +480,12 @@ function_parameters (lua_State          *L,
 
     if (!d_param_die) {
         /* No more entries. Create a ErisFunction and fill-in the paramtype. */
-        const size_t payload = sizeof (ErisTypeInfo*) * (index + 1);
+        const size_t payload = sizeof (ErisTypeInfo*) * index;
         ErisFunction *ef = lua_newuserdata (L, sizeof (ErisFunction) + payload);
+        memset (ef, 0x00, sizeof (ErisFunction) + payload);
         eris_symbol_init ((ErisSymbol*) ef, library, func_address, func_name);
         ef->return_typeinfo = return_typeinfo;
-        ef->n_param         = index + 1;
+        ef->n_param         = index;
         luaL_setmetatable (L, ERIS_FUNCTION);
         return ef;
     }
@@ -526,16 +527,17 @@ function_parameters (lua_State          *L,
         d_next_param_die = NULL;
     }
 
-    ErisFunction *result = function_parameters (L,
-                                                library,
-                                                d_next_param_die,
-                                                d_error,
-                                                return_typeinfo,
-                                                func_address,
-                                                func_name,
-                                                typeinfo ? index + 1 : index);
+    ErisFunction *ef = function_parameters (L,
+                                            library,
+                                            d_next_param_die,
+                                            d_error,
+                                            return_typeinfo,
+                                            func_address,
+                                            func_name,
+                                            typeinfo ? index + 1 : index);
+    if (ef && typeinfo) ef->param_types[index] = typeinfo;
     dwarf_dealloc (library->d_debug, d_next_param_die, DW_DLA_DIE);
-    return result;
+    return ef;
 }
 
 
@@ -549,52 +551,45 @@ make_function_wrapper (lua_State   *L,
 {
     Dwarf_Error d_error = DW_DLE_NE;
 
-    Dwarf_Die d_child_die = NULL;
+    Dwarf_Bool has_return;
+    if (dwarf_hasattr (d_die, DW_AT_type, &has_return, &d_error) != DW_DLV_OK) {
+        return luaL_error (L, "%s: %s", name, dw_errmsg (d_error));
+    }
+
+    const ErisTypeInfo *return_typeinfo = has_return
+            ? eris_library_fetch_die_type_ref_cached (library,
+                                                      d_die,
+                                                      DW_AT_type,
+                                                      &d_error)
+            : eris_typeinfo_void;
+    if (!return_typeinfo) {
+        return luaL_error (L, "%s(): cannot get return type information (%s)\n",
+                           name, dw_errmsg (d_error));
+    }
+    TRACE ("%s(): return type " GREEN "%p\n" NORMAL, name, return_typeinfo);
+
+    Dwarf_Die d_child_die;
     int status = dwarf_child (d_die, &d_child_die, &d_error);
     if (status == DW_DLV_ERROR) {
         return luaL_error (L, "%s: cannot obtain child DIE (%s)\n",
                            name, dw_errmsg (d_error));
     }
 
-    Dwarf_Off d_return_type_offset =
-            eris_library_get_die_ref_attribute_offset (library,
-                                                       d_die,
-                                                       DW_AT_type,
-                                                       &d_error);
-    if (d_return_type_offset == DW_DLV_BADOFFSET) {
-        return luaL_error (L, "%s: cannot get DWARF DIE DW_AT_type offset (%s)\n",
-                           name, dw_errmsg (d_error));
-    }
+    if (status == DW_DLV_NO_ENTRY)
+        d_child_die = NULL;
 
-    const ErisTypeInfo *return_typeinfo =
-            eris_library_lookup_type (library, d_return_type_offset, &d_error);
-    if (!return_typeinfo) {
-        return luaL_error (L, "%s: cannot get return type information (%s)\n",
-                           name, dw_errmsg (d_error));
-    }
-
-    ErisFunction *ef = NULL;
-    if (status == DW_DLV_NO_ENTRY) {
-        /* No more entries. Create a ErisFunction. */
-        ef = lua_newuserdata (L, sizeof (ErisFunction));
-        eris_symbol_init ((ErisSymbol*) ef, library, address, name);
-        ef->return_typeinfo = return_typeinfo;
-        ef->n_param         = 0;
-        luaL_setmetatable (L, ERIS_FUNCTION);
-    } else {
-        TRACE ("%s(): obtaining parameters...\n", name);
-        ef = function_parameters (L,
-                                  library,
-                                  d_child_die,
-                                  &d_error,
-                                  return_typeinfo,
-                                  address,
-                                  name,
-                                  0);
-        if (!ef) {
-            return luaL_error (L, "%s: cannot get type information for "
-                               "parameters (%s)\n", name, dw_errmsg (d_error));
-        }
+    ErisFunction *ef = function_parameters (L,
+                                            library,
+                                            d_child_die,
+                                            &d_error,
+                                            return_typeinfo,
+                                            address,
+                                            name,
+                                            0);
+    dwarf_dealloc (library->d_debug, d_child_die, DW_DLA_DIE);
+    if (!ef) {
+        return luaL_error (L, "%s(): cannot get type information for "
+                           "parameters (%s)\n", name, dw_errmsg (d_error));
     }
     TRACE ("new ErisFunction* at %p (%p:%s)\n", ef, library, name);
     return 1;
