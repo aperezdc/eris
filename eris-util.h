@@ -24,6 +24,8 @@
 # define CHECK_FAILED(...) \
     eris_runtime_check_failed (__FILE__, __LINE__, __func__, __VA_ARGS__)
 
+# define CHECK_UNREACHABLE( ) CHECK_FAILED ("Unreachable code\n")
+
 # define CHECK(expression)                                  \
     do {                                                    \
         if (!(expression))                                  \
@@ -77,6 +79,7 @@ extern void eris_runtime_check_failed (const char *file,
 # undef ERIS_RUNTIME_CHECKS
 # define ERIS_RUNTIME_CHECKS 0
 # define CHECK(e)                            ((void) 0)
+# define CHECK_UNREACHABLE( )                ((void) 0)
 # define CHECK_NUMERIC_OP(o, e, x, t, vt, f) ((void) 0)
 # define CHECK_NOT_NULL(e)                   ((void) 0)
 # define CHECK_NOT_ZERO(e)                   ((void) 0)
