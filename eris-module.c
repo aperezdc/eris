@@ -302,9 +302,9 @@ to_eris_function (lua_State *L)
 }
 
 static inline ErisVariable*
-to_eris_variable (lua_State *L)
+to_eris_variable (lua_State *L, int index)
 {
-    return (ErisVariable*) luaL_checkudata (L, 1, ERIS_VARIABLE);
+    return (ErisVariable*) luaL_checkudata (L, index, ERIS_VARIABLE);
 }
 
 
@@ -840,7 +840,7 @@ static const luaL_Reg eris_function_methods[] = {
 static int
 eris_variable_gc (lua_State *L)
 {
-    ErisVariable *ev = to_eris_variable (L);
+    ErisVariable *ev = to_eris_variable (L, 1);
 
     TRACE_PTR (<, ErisVariable, ev, " type " GREEN "%p" NORMAL " (%s)\n",
                ev->typeinfo, ev->name ? ev->name : "?");
@@ -855,7 +855,7 @@ eris_variable_gc (lua_State *L)
 static int
 eris_variable_tostring (lua_State *L)
 {
-    ErisVariable *ev = to_eris_variable (L);
+    ErisVariable *ev = to_eris_variable (L, 1);
     if (ev->library && ev->name) {
         lua_pushfstring (L,
                          "eris.variable<%s>(%p:%s)",
@@ -873,7 +873,7 @@ eris_variable_tostring (lua_State *L)
 static int
 eris_variable_len (lua_State *L)
 {
-    ErisVariable *ev = to_eris_variable (L);
+    ErisVariable *ev = to_eris_variable (L, 1);
     const ErisTypeInfo *typeinfo =
             eris_typeinfo_get_non_synthetic (ev->typeinfo);
     lua_pushinteger (L, eris_typeinfo_is_array (typeinfo)
@@ -963,7 +963,7 @@ eris_variable_index_special (lua_State      *L,
 static int
 eris_variable_index (lua_State *L)
 {
-    ErisVariable *V = to_eris_variable (L);
+    ErisVariable *V = to_eris_variable (L, 1);
     const ErisTypeInfo *T = eris_typeinfo_get_non_synthetic (V->typeinfo);
     if (!T) return luaL_error (L, "cannot get actual type");
 
@@ -1063,7 +1063,7 @@ eris_variable_newindex_special (lua_State      *L,
 static int
 eris_variable_newindex (lua_State *L)
 {
-    ErisVariable *V = to_eris_variable (L);
+    ErisVariable *V = to_eris_variable (L, 1);
 
     if (eris_typeinfo_get_const (V->typeinfo)) {
         return luaL_error (L, "read-only variable (%p:%s)",

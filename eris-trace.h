@@ -61,6 +61,7 @@ extern bool eris_trace_enabled;
 #define RED     "[0;31m"
 #define GREEN   "[0;32m"
 #define BROWN   "[0;33m"
+#define FBLUE   "[0;34m"
 #define MAGENTA "[0;35m"
 #define CYAN    "[0;36m"
 #define GREY    "[0;37m"
