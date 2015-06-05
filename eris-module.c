@@ -614,7 +614,7 @@ eris_variable_push_userdata (lua_State          *L,
     V->typeinfo_owned = false;
     luaL_setmetatable (L, ERIS_VARIABLE);
 
-    TRACE_PTR (+, ErisVariable, V, " type " GREEN "%p" NORMAL "(%s)\n"
+    TRACE_PTR (+, ErisVariable, V, " type " GREEN "%p" NORMAL "(%s)\n",
                typeinfo, name ? name : "?");
     return V;
 }
