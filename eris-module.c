@@ -932,6 +932,10 @@ cvalue_push (lua_State          *L,
                                          (void*) address,
                                          NULL);
             return 1;
+
+        case ERIS_TYPE_VOID:
+            return 0; /* Nothing to push. */
+
         default:
             return luaL_error (L, "unsupported type '%s'",
                                eris_type_name (eris_typeinfo_type (typeinfo)));
