@@ -126,6 +126,26 @@ l_eris_typeinfo_tostring (lua_State *L)
     return 1;
 }
 
+
+static inline const char*
+l_eris_typeinfo_type_string (const ErisTypeInfo *typeinfo)
+{
+    CHECK_NOT_NULL (typeinfo);
+
+#define RETURN_TYPE_STRING_ITEM(suffix, name, _) \
+        case ERIS_TYPE_ ## suffix: return #name;
+
+    switch (eris_typeinfo_type (typeinfo)) {
+        ALL_TYPES (RETURN_TYPE_STRING_ITEM)
+    }
+
+#undef RETURN_TYPE_STRING_ITEM
+
+    CHECK_UNREACHABLE ();
+    return NULL;
+}
+
+
 static int
 l_eris_typeinfo_index (lua_State *L)
 {
@@ -160,6 +180,11 @@ l_eris_typeinfo_index (lua_State *L)
             lua_pushinteger (L, eris_typeinfo_sizeof (typeinfo));
         } else if (!strcmp ("readonly", field)) {
             lua_pushboolean (L, eris_typeinfo_is_const (typeinfo));
+        } else if (string_equal ("kind", field)) {
+            lua_pushstring (L, l_eris_typeinfo_type_string (typeinfo));
+        } else if (string_equal ("type", field)) {
+            const ErisTypeInfo *base = eris_typeinfo_base (typeinfo);
+            if (base) eris_typeinfo_push_userdata (L, base);
         } else {
             return luaL_error (L, "invalid field '%s'", field);
         }
@@ -171,10 +196,15 @@ static int
 l_eris_typeinfo_len (lua_State *L)
 {
     const ErisTypeInfo *typeinfo = to_eris_typeinfo (L, 1);
-    if (!(typeinfo = eris_typeinfo_get_compound (typeinfo))) {
+    typeinfo = eris_typeinfo_get_non_synthetic (typeinfo);
+
+    if (eris_typeinfo_is_array (typeinfo)) {
+        lua_pushinteger (L, eris_typeinfo_array_n_items (typeinfo));
+    } else if ((typeinfo = eris_typeinfo_get_compound (typeinfo))) {
+        lua_pushinteger (L, eris_typeinfo_compound_n_members (typeinfo));
+    } else {
         return luaL_error (L, "type is not a struct or union");
     }
-    lua_pushinteger (L, eris_typeinfo_compound_n_members (typeinfo));
     return 1;
 }
 
