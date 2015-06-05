@@ -256,7 +256,7 @@ eris_typeinfo_new_struct (const char *name,
                           uint32_t    n_members)
 {
     ErisTypeInfo *typeinfo = eris_typeinfo_new (ERIS_TYPE_STRUCT, n_members);
-    typeinfo->ti_compound.name      = strdup (name ? name : "@");
+    typeinfo->ti_compound.name      = name ? strdup (name) : NULL;
     typeinfo->ti_compound.size      = size;
     typeinfo->ti_compound.n_members = n_members;
 
@@ -271,7 +271,7 @@ eris_typeinfo_new_union (const char *name,
                          uint32_t    n_members)
 {
     ErisTypeInfo *typeinfo = eris_typeinfo_new (ERIS_TYPE_UNION, n_members);
-    typeinfo->ti_compound.name      = strdup (name ? name : "@");
+    typeinfo->ti_compound.name      = name ? strdup (name) : NULL;
     typeinfo->ti_compound.size      = size;
     typeinfo->ti_compound.n_members = n_members;
 
