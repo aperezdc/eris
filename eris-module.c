@@ -23,6 +23,8 @@
 #include <fcntl.h>
 #include <errno.h>
 
+typedef struct _ErisFunction ErisFunction;
+#include "eris-fcall.h"
 
 #ifndef ERIS_LIB_SUFFIX
 #define ERIS_LIB_SUFFIX ".so"
@@ -274,12 +276,13 @@ typedef struct {
 } ErisSymbol;
 
 
-typedef struct {
+struct _ErisFunction {
     ERIS_COMMON_FIELDS;
+    ERIS_FUNCTION_FCALL_FIELDS;
     const ErisTypeInfo *return_typeinfo;
     uint32_t            n_param;
     const ErisTypeInfo *param_types[];
-} ErisFunction;
+};
 
 typedef struct {
     ERIS_COMMON_FIELDS;
@@ -623,6 +626,8 @@ make_function_wrapper (lua_State   *L,
         return luaL_error (L, "%s: cannot get parameter types (%s)",
                            name, dw_errmsg (d_error));
     }
+    ERIS_FUNCTION_FCALL_INIT (ef);
+
     TRACE (BGREEN "%s() " NORMAL, name);
     TRACE_PTR (->, ErisFunction, ef, "\n");
     return 1;
@@ -790,6 +795,7 @@ eris_function_gc (lua_State *L)
 
     TRACE_PTR (<, ErisFunction, ef, " (%s)\n", ef->name ? ef->name : "?");
 
+    ERIS_FUNCTION_FCALL_FREE (ef);
     eris_symbol_free ((ErisSymbol*) ef);
     return 0;
 }
@@ -2048,3 +2054,7 @@ eris_library_get_tue_offset (ErisLibrary *library,
 
     return DW_DLV_BADOFFSET;
 }
+
+
+#define ERIS_FCALL_IMPLEMENT 1
+#include "eris-fcall.h"

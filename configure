@@ -50,6 +50,8 @@ Available options:
   --enable-trace   Enable TRACE(), for debugging purposes.
   --enable-checks  Enable additional run-time sanity checks.
   --enable-asan    Compile with ASAN support (needs Clang).
+  --enable-ffi     Use libffi instead of machine-specific code
+                   to perform function calls.
   --enable-bundled-libdwarf
                    Use a bundled copy libdwarf instead of the
                    one supplied by the operating system.
@@ -289,6 +291,7 @@ debug_build=false
 enable_asan=false
 enable_trace=false
 enable_checks=false
+enable_ffi=false
 enable_bundled_lua=false
 enable_bundled_libdwarf=false
 objdir=$(pwd)
@@ -334,6 +337,13 @@ for var in "$@" ; do
 			;;
 		--disable-checks)
 			enable_checks=false
+			;;
+
+		--enable-ffi)
+			enable_ffi=true
+			;;
+		--disable-ffi)
+			enable_ffi=false
 			;;
 
 		--enable-bundled-lua)
@@ -500,15 +510,26 @@ else
 	fi
 fi
 
+
+cf_checking 'whether to use libffi'
+if ${enable_ffi}
+then
+	cf_check_result yes
+	CPPFLAGS="${CPPFLAGS} -DERIS_FCALL_FFI=1"
+	cf_pkg_config FFI 'libffi >= 3.2' || cf_die 'libffi not found'
+else
+	cf_check_result no
+fi
+
 ####################################################### Final fixups ######
 
 cf_build_conf <<EOF
 obj      = ${objdir}
 prefix   = ${PREFIX}
 cc       = ${CC}
-CFLAGS   = ${CFLAGS} \${EXTRA_CFLAGS}
+CFLAGS   = ${CFLAGS} ${FFI_CFLAGS} \${EXTRA_CFLAGS}
 CPPFLAGS = ${CPPFLAGS} \${EXTRA_CPPFLAGS}
-LDFLAGS  = ${LDFLAGS} \${EXTRA_LDFLAGS}
+LDFLAGS  = ${LDFLAGS} ${FFI_LDFLAGS} \${EXTRA_LDFLAGS}
 libs     = ${LIBS} \${EXTRA_LIBS}
 
 lua_build = ${lua_build_type}
