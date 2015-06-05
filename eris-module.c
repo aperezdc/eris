@@ -1696,6 +1696,16 @@ eris_library_build_pointer_type_typeinfo (ErisLibrary *library,
     CHECK_NOT_NULL (d_type_die);
     CHECK_NOT_NULL (d_error);
 
+    Dwarf_Bool has_type;
+    if (dwarf_hasattr (d_type_die, DW_AT_type, &has_type, d_error) != DW_DLV_OK) {
+        DW_TRACE_DIE_ERROR ("cannot check attribute presence\n",
+                            library->d_debug, d_type_die, *d_error);
+        return NULL;
+    }
+
+    if (!has_type)
+        return eris_typeinfo_pointer;
+
     const ErisTypeInfo *base =
             eris_library_fetch_die_type_ref_cached (library,
                                                     d_type_die,
@@ -1706,7 +1716,6 @@ eris_library_build_pointer_type_typeinfo (ErisLibrary *library,
                             library->d_debug, d_type_die, *d_error);
         return NULL;
     }
-
     return eris_typeinfo_new_pointer (base);
 }
 
