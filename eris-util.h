@@ -78,12 +78,12 @@ extern void eris_runtime_check_failed (const char *file,
 #else /* !ERIS_DEBUG_CHECKS */
 # undef ERIS_RUNTIME_CHECKS
 # define ERIS_RUNTIME_CHECKS 0
-# define CHECK(e)                            ((void) 0)
-# define CHECK_UNREACHABLE( )                ((void) 0)
-# define CHECK_NUMERIC_OP(o, e, x, t, vt, f) ((void) 0)
-# define CHECK_NOT_NULL(e)                   ((void) 0)
-# define CHECK_NOT_ZERO(e)                   ((void) 0)
-# define CHECK_STR_EQ(e, x)                  ((void) 0)
+# define CHECK(e)                        ((void) 0)
+# define CHECK_UNREACHABLE( )            ((void) 0)
+# define CHECK_NUMERIC_OP(o, e, x, t, f) ((void) 0)
+# define CHECK_NOT_NULL(e)               ((void) 0)
+# define CHECK_NOT_ZERO(e)               ((void) 0)
+# define CHECK_STR_EQ(e, x)              ((void) 0)
 #endif /* ERIS_DEBUG_CHECKS */
 
 #define CHECK_I8_EQ(e, x)    CHECK_NUMERIC_OP (==, e, x, int8_t,   PRIi8)
