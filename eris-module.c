@@ -596,8 +596,8 @@ make_function_wrapper (lua_State   *L,
     }
     TRACE ("%s[@]: return type " GREEN "%p\n" NORMAL, name, return_typeinfo);
 
-    Dwarf_Die d_child_die;
-    int status = dwarf_child (d_die, &d_child_die, &d_error);
+    dw_ldie_t child = { library->d_debug };
+    int status = dwarf_child (d_die, &child.die, &d_error);
     if (status == DW_DLV_ERROR) {
         DW_TRACE_DIE_ERROR ("%s: cannot get child\n",
                             library->d_debug, d_die, d_error, name);
@@ -605,25 +605,26 @@ make_function_wrapper (lua_State   *L,
                            name, dw_errmsg (d_error));
     }
 
-    if (status == DW_DLV_NO_ENTRY)
-        d_child_die = NULL;
+    if (status == DW_DLV_NO_ENTRY) {
+        CHECK (child.die == NULL);
+    }
 
     ErisFunction *ef = function_parameters (L,
                                             library,
-                                            d_child_die,
+                                            child.die,
                                             &d_error,
                                             return_typeinfo,
                                             address,
                                             name,
                                             0);
-    dwarf_dealloc (library->d_debug, d_child_die, DW_DLA_DIE);
     if (!ef) {
         DW_TRACE_DIE_ERROR ("%s: cannot get parameter types\n",
                             library->d_debug, d_die, d_error, name);
         return luaL_error (L, "%s: cannot get parameter types (%s)",
                            name, dw_errmsg (d_error));
     }
-    TRACE ("new ErisFunction* at %p (%p:%s)\n", ef, library, name);
+    TRACE (BGREEN "%s() " NORMAL, name);
+    TRACE_PTR (->, ErisFunction, ef, "\n");
     return 1;
 }
 
