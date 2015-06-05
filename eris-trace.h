@@ -14,6 +14,7 @@
 # undef ERIS_TRACE
 # define ERIS_TRACE 1
 
+# define ON_TRACE(x) x
 # define TRACE(...)                                                 \
     do {                                                            \
         if (eris_trace_enabled)                                     \
@@ -53,6 +54,7 @@ extern bool eris_trace_enabled;
 # define ERIS_TRACE 0
 # define eris_trace_setup( )  ((void)0)
 # define TRACE(...)           ((void)0)
+# define ON_TRACE(x)          ((void)0)
 #endif /* ERIS_TRACE */
 
 #define NORMAL "[0;0m"

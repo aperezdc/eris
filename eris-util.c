@@ -52,3 +52,13 @@ eris_runtime_check_failed (const char *file,
     abort ();
 }
 
+
+void
+lauto_free (void *ptr)
+{
+    void **location = ptr;
+    if (*location) {
+        free (*location);
+        *location = NULL;
+    }
+}

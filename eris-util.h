@@ -193,6 +193,15 @@ extern void eris_runtime_check_failed (const char *file,
 
 
 /*
+ * Semi-automatic C memory cleanup using GCC/Clang's "cleanup" attribute.
+ */
+#define LAUTO(clean) __attribute__((cleanup(clean)))
+#define LMEM         LAUTO(lauto_free)
+
+extern void lauto_free (void*);
+
+
+/*
  * Miscellaneous utilities.
  */
 static inline bool

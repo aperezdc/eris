@@ -41,12 +41,14 @@ build specials.inc : gperf specials.gperf
 build ${obj}/eris-util.o      : cc eris-util.c
 build ${obj}/eris-trace.o     : cc eris-trace.c
 build ${obj}/eris-typing.o    : cc eris-typing.c
+build ${obj}/eris-libdwarf.o  : cc eris-libdwarf.c
 build ${obj}/eris-typecache.o : cc eris-typecache.c
 build ${obj}/eris-module.o    : cc eris-module.c | specials.inc eris-lua.h eris-libdwarf.h
 build ${obj}/eris.so : ld     $
       ${obj}/eris-util.o      $
       ${obj}/eris-trace.o     $
       ${obj}/eris-typing.o    $
+      ${obj}/eris-libdwarf.o  $
       ${obj}/eris-typecache.o $
       ${obj}/eris-module.o    | ${libdwarf_dep}
   ldflags = ${ldflags} -shared

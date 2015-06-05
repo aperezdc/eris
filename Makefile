@@ -64,7 +64,7 @@ include libdwarf-${libdwarf_build}.mk
 
 # Eris (non-JIT) module sources.
 ERIS_MODULE_SRCS := eris-module.c eris-trace.c eris-util.c eris-typing.c \
-                    eris-typecache.c
+                    eris-typecache.c eris-libdwarf.c
 ERIS_MODULE_OBJS := $(patsubst %.c,${OUT}/%.o,${ERIS_MODULE_SRCS})
 
 # Testutil module source.

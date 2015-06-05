@@ -414,13 +414,6 @@ l_eris_typeinfo_call (lua_State *L)
 }
 
 
-static inline const char*
-dw_errmsg (Dwarf_Error d_error)
-{
-    return d_error ? dwarf_errmsg (d_error) : "no libdwarf error";
-}
-
-
 static inline Dwarf_Off
 eris_library_get_die_ref_attribute_offset (ErisLibrary *library,
                                            Dwarf_Die    d_die,
@@ -431,17 +424,16 @@ eris_library_get_die_ref_attribute_offset (ErisLibrary *library,
     CHECK_NOT_NULL (d_die);
     CHECK_NOT_NULL (d_error);
 
-    Dwarf_Attribute d_attr = NULL;
-    if (dwarf_attr (d_die, d_attr_tag, &d_attr, d_error) != DW_DLV_OK)
+    dw_lattr_t value = { library->d_debug };
+    if (dwarf_attr (d_die, d_attr_tag, &value.attr, d_error) != DW_DLV_OK)
         return DW_DLV_BADOFFSET;
 
-    CHECK_NOT_NULL (d_attr);
+    CHECK_NOT_NULL (value.attr);
 
     Dwarf_Off d_offset;
-    bool success = dwarf_global_formref (d_attr,
+    bool success = dwarf_global_formref (value.attr,
                                          &d_offset,
                                          d_error) == DW_DLV_OK;
-    dwarf_dealloc (library->d_debug, d_attr, DW_DLA_ATTR);
     return success ? d_offset : DW_DLV_BADOFFSET;
 }
 
@@ -593,42 +585,6 @@ make_function_wrapper (lua_State   *L,
     }
     TRACE ("new ErisFunction* at %p (%p:%s)\n", ef, library, name);
     return 1;
-}
-
-
-static char*
-die_get_string_attribute (ErisLibrary *library,
-                          Dwarf_Die    d_die,
-                          Dwarf_Half   d_attr_tag,
-                          Dwarf_Error *d_error)
-{
-    Dwarf_Attribute d_attr;
-    if (dwarf_attr (d_die, d_attr_tag, &d_attr, d_error) != DW_DLV_OK)
-        return NULL;
-
-    char *d_result;
-    if (dwarf_formstring (d_attr, &d_result, d_error) != DW_DLV_OK)
-        d_result = NULL;
-
-    dwarf_dealloc (library->d_debug, d_attr, DW_DLA_ATTR);
-    return d_result;
-}
-
-
-static bool
-die_get_uint_attribute (ErisLibrary    *library,
-                        Dwarf_Die       d_die,
-                        Dwarf_Half      d_attr_tag,
-                        Dwarf_Unsigned *d_result,
-                        Dwarf_Error    *d_error)
-{
-    Dwarf_Attribute d_attr;
-    if (dwarf_attr (d_die, d_attr_tag, &d_attr, d_error) != DW_DLV_OK)
-        return false;
-
-    bool success = dwarf_formudata (d_attr, d_result, d_error) == DW_DLV_OK;
-    dwarf_dealloc (library->d_debug, d_attr, DW_DLA_ATTR);
-    return success;
 }
 
 
@@ -1571,16 +1527,16 @@ eris_library_build_base_type_typeinfo (ErisLibrary *library,
 
     Dwarf_Unsigned d_encoding, d_byte_size;
 
-    if (!die_get_uint_attribute (library,
-                                 d_type_die,
-                                 DW_AT_encoding,
-                                 &d_encoding,
-                                 d_error) ||
-        !die_get_uint_attribute (library,
-                                 d_type_die,
-                                 DW_AT_byte_size,
-                                 &d_byte_size,
-                                 d_error))
+    if (!dw_die_get_uint_attr (library->d_debug,
+                               d_type_die,
+                               DW_AT_encoding,
+                               &d_encoding,
+                               d_error) ||
+        !dw_die_get_uint_attr (library->d_debug,
+                               d_type_die,
+                               DW_AT_byte_size,
+                               &d_byte_size,
+                               d_error))
             return NULL;
 
     ErisType type;
@@ -1607,29 +1563,7 @@ eris_library_build_base_type_typeinfo (ErisLibrary *library,
     }
 #undef TYPEINFO_ITEM
 
-    Dwarf_Error d_name_error = DW_DLE_NE;
-    const char* name = die_get_string_attribute (library,
-                                                 d_type_die,
-                                                 DW_AT_name,
-                                                 &d_name_error);
-    if (!name) {
-        Dwarf_Off d_global_offset = 0;
-        Dwarf_Off d_local_offset = 0;
-        Dwarf_Error d_offsets_error = DW_DLE_NE;
-        if (dwarf_die_offsets (d_type_die,
-                               &d_global_offset,
-                               &d_local_offset,
-                               &d_offsets_error) == DW_DLV_OK) {
-            TRACE ("no type name for TUE %#lx (%s)\n",
-                   (unsigned long) d_global_offset,
-                   dw_errmsg (d_name_error));
-        } else {
-            TRACE ("no type name for TUE at %p (%s)\n",
-                   d_type_die, dw_errmsg (d_name_error));
-        }
-    }
-
-    return eris_typeinfo_new_base (type, name);
+    return eris_typeinfo_new_base (type, NULL);
 }
 
 
@@ -1642,10 +1576,10 @@ eris_library_build_typedef_typeinfo (ErisLibrary *library,
     CHECK_NOT_NULL (d_type_die);
     CHECK_NOT_NULL (d_error);
 
-    const char *name = die_get_string_attribute (library,
-                                                 d_type_die,
-                                                 DW_AT_name,
-                                                 d_error);
+    const char *name = dw_die_get_string_attr (library->d_debug,
+                                               d_type_die,
+                                               DW_AT_name,
+                                               d_error);
     if (!name) {
         TRACE ("cannot get TUE DW_AT_name (%s)\n", dw_errmsg (*d_error));
         return NULL;
@@ -1688,11 +1622,8 @@ eris_library_fetch_die_type_ref_cached (ErisLibrary *library,
                                                        d_tag,
                                                        d_error);
     if (d_offset == DW_DLV_BADOFFSET) {
-        char *d_die_name;
-        if (dwarf_diename (d_die, &d_die_name, d_error) != DW_DLV_OK)
-            d_die_name = NULL;
-        TRACE ("DIE %s: cannot get DIE offset\n", d_die_name ? : "?");
-        dwarf_dealloc (library->d_debug, d_die_name, DW_DLA_STRING);
+        ON_TRACE (LMEM char *r = dw_die_repr (library->d_debug, d_die));
+        TRACE ("%s: cannot get DIE offset (%s)\n", r, dw_errmsg (*d_error));
         return NULL;
     }
 
@@ -1716,66 +1647,12 @@ eris_library_build_pointer_type_typeinfo (ErisLibrary *library,
                                                     DW_AT_type,
                                                     d_error);
     if (!base) {
-        char *d_die_name;
-        if (dwarf_diename (d_type_die, &d_die_name, NULL) != DW_DLV_OK)
-            d_die_name = NULL;
-        TRACE ("%s: cannot get typeinfo\n", d_die_name ? : "?");
-        dwarf_dealloc (library->d_debug, d_die_name, DW_DLA_STRING);
+        ON_TRACE (LMEM char* r = dw_die_repr (library->d_debug, d_type_die));
+        TRACE ("%s: cannot get typeinfo (%s)\n", r, dw_errmsg (*d_error));
         return NULL;
     }
 
     return eris_typeinfo_new_pointer (base);
-}
-
-
-static bool
-get_array_n_items (ErisLibrary *library,
-                   Dwarf_Die     d_type_die,
-                   uint64_t     *n_items,
-                   Dwarf_Error  *d_error)
-{
-    CHECK_NOT_NULL (library);
-    CHECK_NOT_NULL (d_type_die);
-    CHECK_NOT_NULL (n_items);
-    CHECK_NOT_NULL (d_error);
-
-    *n_items = UINT64_MAX;
-
-    Dwarf_Die d_child_die = NULL;
-    if (dwarf_child (d_type_die, &d_child_die, d_error) != DW_DLV_OK)
-        return false;
-
-    bool result = false;
-    for (;;) {
-        Dwarf_Half d_tag;
-        if (dwarf_tag (d_child_die, &d_tag, d_error) != DW_DLV_OK)
-            break;
-
-        if (d_tag == DW_TAG_subrange_type) {
-            Dwarf_Unsigned d_count = 0;
-            if (die_get_uint_attribute (library,
-                                        d_child_die,
-                                        DW_AT_count,
-                                        &d_count,
-                                        d_error)) {
-                *n_items = (uint64_t) d_count;
-                result = true;
-            }
-            break;
-        }
-
-        Dwarf_Die d_next_child_die;
-        if (dwarf_siblingof (library->d_debug,
-                             d_child_die,
-                             &d_next_child_die,
-                             d_error) == DW_DLV_OK) {
-            dwarf_dealloc (library->d_debug, d_child_die, DW_DLA_DIE);
-            d_child_die = d_next_child_die;
-        }
-    }
-
-    dwarf_dealloc (library->d_debug, d_child_die, DW_DLA_DIE);
-    return result;
 }
 
 
@@ -1788,8 +1665,11 @@ eris_library_build_array_type_typeinfo (ErisLibrary *library,
     CHECK_NOT_NULL (d_type_die);
     CHECK_NOT_NULL (d_error);
 
-    uint64_t n_items;
-    if (!get_array_n_items (library, d_type_die, &n_items, d_error))
+    Dwarf_Unsigned n_items;
+    if (!dw_tue_array_get_n_items (library->d_debug,
+                                   d_type_die,
+                                   &n_items,
+                                   d_error))
         return NULL;
 
     Dwarf_Off d_offset =
@@ -1809,7 +1689,7 @@ eris_library_build_array_type_typeinfo (ErisLibrary *library,
         return NULL;
     }
 
-    return eris_typeinfo_new_array (base, n_items);
+    return eris_typeinfo_new_array (base, (uint64_t) n_items);
 }
 
 
@@ -1877,23 +1757,29 @@ structure_members (ErisLibrary *library,
     CHECK_NOT_NULL (d_error);
 
     Dwarf_Unsigned d_member_offset;
-    if (!die_get_uint_attribute (library,
-                                 d_member_die,
-                                 DW_AT_data_member_location,
-                                 &d_member_offset,
-                                 d_error)) {
-        TRACE ("%s: cannot get member DIE DW_AT_data_member_location (%s)\n",
-               struct_name ? struct_name : "<struct>", dw_errmsg (*d_error));
+    if (!dw_die_get_uint_attr (library->d_debug,
+                               d_member_die,
+                               DW_AT_data_member_location,
+                               &d_member_offset,
+                               d_error)) {
+        ON_TRACE (LMEM char* r = dw_die_repr (library->d_debug,
+                                              d_member_die));
+        TRACE ("%s::%s: cannot get DIE DW_AT_data_member_location (%s)\n",
+               compound_name ? compound_name : "@", r, dw_errmsg (*d_error));
         return NULL;
     }
 
-    const char *member_name = die_get_string_attribute (library,
-                                                        d_member_die,
-                                                        DW_AT_name,
-                                                        d_error);
-    if (!member_name) {
-        TRACE ("%s: cannot get member DIE DW_AT_name (%s)\n",
-               struct_name ? struct_name : "<struct>", dw_errmsg (*d_error));
+    *d_error = DW_DLE_NE;
+    const char *member_name = dw_die_get_string_attr (library->d_debug,
+                                                      d_member_die,
+                                                      DW_AT_name,
+                                                      d_error);
+    if (!member_name && *d_error != DW_DLE_NE) {
+        ON_TRACE (LMEM char* r = dw_die_repr (library->d_debug,
+                                              d_member_die));
+        TRACE ("%s::%s: cannot get member DIE DW_AT_name (%s)\n",
+               compound_name ? compound_name : "@",
+               r, dw_errmsg (*d_error));
         return NULL;
     }
 
@@ -1903,9 +1789,10 @@ structure_members (ErisLibrary *library,
                                                        DW_AT_type,
                                                        d_error);
     if (d_type_offset == DW_DLV_BADOFFSET) {
-        TRACE ("%s.%s: cannot get member DIE DW_AT_type offset (%s)\n",
-               struct_name ? struct_name : "<struct>",
-               member_name, dw_errmsg (*d_error));
+        ON_TRACE (LMEM char* r = dw_die_repr (library->d_debug,
+                                              d_member_die));
+        TRACE ("%s::%s: cannot get member DIE DW_AT_type offset (%s)\n",
+               compound_name ? compound_name : "@", r, dw_errmsg (*d_error));
         return NULL;
     }
 
@@ -1913,9 +1800,10 @@ structure_members (ErisLibrary *library,
                                                              d_type_offset,
                                                              d_error);
     if (!typeinfo) {
-        TRACE ("%s.%s: cannot get member type information (%s)\n",
-               struct_name ? struct_name : "<struct>",
-               member_name, dw_errmsg (*d_error));
+        ON_TRACE (LMEM char* r = dw_die_repr (library->d_debug,
+                                              d_member_die));
+        TRACE ("%s::%s: cannot get member type information (%s)\n",
+               compound_name ? compound_name : "@", r, dw_errmsg (*d_error));
         return NULL;
     }
 
@@ -1960,9 +1848,9 @@ structure_members (ErisLibrary *library,
     }
 
     CHECK_INT_EQ (DW_DLV_ERROR, status);
-    TRACE ("%s.%s: cannot get member DIE sibling (%s)\n",
-           struct_name ? struct_name : "<struct>",
-           member_name, dw_errmsg (*d_error));
+    ON_TRACE (LMEM char* r = dw_die_repr (library->d_debug, d_member_die));
+    TRACE ("%s::%s: cannot get member DIE sibling (%s)\n",
+           compound_name ? compound_name : "@", r, dw_errmsg (*d_error));
     return NULL;
 }
 
@@ -1977,21 +1865,21 @@ eris_library_build_structure_type_typeinfo (ErisLibrary *library,
     CHECK_NOT_NULL (d_error);
 
     *d_error = DW_DLE_NE;
-    const char *name = die_get_string_attribute (library,
-                                                 d_type_die,
-                                                 DW_AT_name,
-                                                 d_error);
+    const char *name = dw_die_get_string_attr (library->d_debug,
+                                               d_type_die,
+                                               DW_AT_name,
+                                               d_error);
     if (*d_error != DW_DLE_NE) {
         TRACE ("cannot get TUE DW_AT_name (%s)\n", dw_errmsg (*d_error));
         return NULL;
     }
 
     Dwarf_Unsigned d_byte_size;
-    if (!die_get_uint_attribute (library,
-                                 d_type_die,
-                                 DW_AT_byte_size,
-                                 &d_byte_size,
-                                 d_error)) {
+    if (!dw_die_get_uint_attr (library->d_debug,
+                               d_type_die,
+                               DW_AT_byte_size,
+                               &d_byte_size,
+                               d_error)) {
         return eris_typeinfo_new_struct (name, 0, 0);
     }
 
