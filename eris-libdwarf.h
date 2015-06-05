@@ -36,6 +36,7 @@
     F (const_type)           \
     F (array_type)           \
     F (pointer_type)         \
+    F (union_type)           \
     F (structure_type)
 
 #define DW_DEALLOC_TYPES(F)                    \

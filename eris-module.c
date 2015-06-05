@@ -136,7 +136,7 @@ l_eris_typeinfo_index (lua_State *L)
             return luaL_error (L, "type is not a struct");
         }
 
-        uint32_t n_members = eris_typeinfo_struct_n_members (typeinfo);
+        uint32_t n_members = eris_typeinfo_compound_n_members (typeinfo);
         lua_Integer index = luaL_checkinteger (L, 2);
         if (index < 1 || index > n_members) {
             return luaL_error (L, "index %d out of bounds (length=%d)",
@@ -144,7 +144,7 @@ l_eris_typeinfo_index (lua_State *L)
         }
 
         const ErisTypeInfoMember *member =
-                eris_typeinfo_struct_const_member (typeinfo, index - 1);
+                eris_typeinfo_compound_const_member (typeinfo, index - 1);
         lua_createtable (L, 0, 3);
         lua_pushstring (L, member->name);
         lua_setfield (L, -2, "name");
@@ -174,7 +174,7 @@ l_eris_typeinfo_len (lua_State *L)
     if (!(typeinfo = eris_typeinfo_get_struct (typeinfo))) {
         return luaL_error (L, "type is not a struct");
     }
-    lua_pushinteger (L, eris_typeinfo_struct_n_members (typeinfo));
+    lua_pushinteger (L, eris_typeinfo_compound_n_members (typeinfo));
     return 1;
 }
 
@@ -889,6 +889,9 @@ cvalue_push (lua_State          *L,
     switch (eris_typeinfo_type (typeinfo)) {
         INTEGER_TYPES (INTEGER_TO_LUA)
         FLOAT_TYPES (FLOAT_TO_LUA)
+        case ERIS_TYPE_BOOL:
+            lua_pushboolean (L, ((bool*) address)[index]);
+            return 1;
         case ERIS_TYPE_ARRAY:
         case ERIS_TYPE_STRUCT:
             address += eris_typeinfo_sizeof (typeinfo) * index;
@@ -899,7 +902,8 @@ cvalue_push (lua_State          *L,
                                          NULL);
             return 1;
         default:
-            return luaL_error (L, "unsupported type");
+            return luaL_error (L, "unsupported type '%s'",
+                               eris_type_name (eris_typeinfo_type (typeinfo)));
     }
 }
 
@@ -955,11 +959,11 @@ eris_variable_index (lua_State *L)
         case ERIS_TYPE_STRUCT: {
             const ErisTypeInfoMember *member;
             if (lua_isinteger (L, 2)) {
-                L_BOUNDS_CHECK (index, 2, eris_typeinfo_struct_n_members (T));
-                member = eris_typeinfo_struct_const_member (T, index);
+                L_BOUNDS_CHECK (index, 2, eris_typeinfo_compound_n_members (T));
+                member = eris_typeinfo_compound_const_member (T, index);
             } else {
                 const char *name = luaL_checkstring (L, 2);
-                member = eris_typeinfo_struct_const_named_member (T, name);
+                member = eris_typeinfo_compound_const_named_member (T, name);
                 if (!member) {
                     return luaL_error (L, "%s: no such struct member", name);
                 }
@@ -979,6 +983,8 @@ eris_variable_index (lua_State *L)
 #define INTEGER_FROM_LUA(suffix, name, ctype) \
         case ERIS_TYPE_ ## suffix:            \
             ((ctype*) address)[index] = (ctype) luaL_checkinteger (L, lindex); return 0;
+#define SLOT(ctype) \
+        (((ctype*) address)[index])
 
 static inline int
 cvalue_get (lua_State          *L,
@@ -992,12 +998,20 @@ cvalue_get (lua_State          *L,
     switch (eris_typeinfo_type (typeinfo)) {
         INTEGER_TYPES (INTEGER_FROM_LUA)
         FLOAT_TYPES (FLOAT_FROM_LUA)
-        default: return luaL_error (L, "unsupported type");
+        case ERIS_TYPE_BOOL:
+            SLOT (bool) = lua_toboolean (L, lindex);
+            break;
+        default:
+            return luaL_error (L, "unsupported type '%s'",
+                               eris_type_name (eris_typeinfo_type (typeinfo)));
     }
+
+    return 1;
 }
 
 #undef INTEGER_FROM_LUA
 #undef FLOAT_FROM_LUA
+#undef SLOT
 
 
 static inline int
@@ -1051,11 +1065,11 @@ eris_variable_newindex (lua_State *L)
         case ERIS_TYPE_STRUCT: {
             const ErisTypeInfoMember *member;
             if (lua_isinteger (L, 2)) {
-                L_BOUNDS_CHECK (index, 2, eris_typeinfo_struct_n_members (T));
-                member = eris_typeinfo_struct_const_member (T, index);
+                L_BOUNDS_CHECK (index, 2, eris_typeinfo_compound_n_members (T));
+                member = eris_typeinfo_compound_const_member (T, index);
             } else {
                 const char *name = luaL_checkstring (L, 2);
-                member = eris_typeinfo_struct_const_named_member (T, name);
+                member = eris_typeinfo_compound_const_named_member (T, name);
                 if (!member) {
                     return luaL_error (L, "%s: no such struct member", name);
                 }
@@ -1370,7 +1384,7 @@ eris_offsetof (lua_State *L)
 
     const ErisTypeInfoMember *member;
     if (lua_isinteger (L, 2)) {
-        uint32_t n_members = eris_typeinfo_struct_n_members (typeinfo);
+        uint32_t n_members = eris_typeinfo_compound_n_members (typeinfo);
         lua_Integer index = luaL_checkinteger (L, 2);
         if (index < 0) index += n_members;
         if (index <= 0 || index > n_members) {
@@ -1378,10 +1392,10 @@ eris_offsetof (lua_State *L)
                                "(effective=%d, length=%d)",
                                luaL_checkinteger (L, 2), index, n_members);
         }
-        member = eris_typeinfo_struct_const_member (typeinfo, index - 1);
+        member = eris_typeinfo_compound_const_member (typeinfo, index - 1);
     } else {
         const char *name = luaL_checkstring (L, 2);
-        member = eris_typeinfo_struct_const_named_member (typeinfo, name);
+        member = eris_typeinfo_compound_const_named_member (typeinfo, name);
         if (!member) {
             const char *typename = eris_typeinfo_name (typeinfo);
             return luaL_error (L, "%s.%s: no such member field",
@@ -1539,14 +1553,13 @@ eris_library_build_base_type_typeinfo (ErisLibrary *library,
                                d_error))
             return NULL;
 
-    ErisType type;
-
-#define TYPEINFO_ITEM(suffix, _, ctype)  \
-        case sizeof (ctype):             \
-            type = ERIS_TYPE_ ## suffix; \
-            break;
+#define TYPEINFO_ITEM(_, name, ctype) \
+        case sizeof (ctype):          \
+            return eris_typeinfo_ ## name;
 
     switch (d_encoding) {
+        case DW_ATE_boolean:
+            return eris_typeinfo_bool;
         case DW_ATE_float:
             switch (d_byte_size) { FLOAT_TYPES (TYPEINFO_ITEM) }
             break;
@@ -1558,12 +1571,11 @@ eris_library_build_base_type_typeinfo (ErisLibrary *library,
         case DW_ATE_unsigned_char:
             switch (d_byte_size) { INTEGER_U_TYPES (TYPEINFO_ITEM) }
             break;
-        default:
-            return NULL;
     }
 #undef TYPEINFO_ITEM
 
-    return eris_typeinfo_new_base (type, NULL);
+    CHECK_UNREACHABLE ();
+    return NULL;
 }
 
 
@@ -1744,114 +1756,154 @@ eris_library_build_const_type_typeinfo (ErisLibrary *library,
  *         DW_AT_type                  <die-ref-offset>
  *         DW_AT_data_member_location  <in-struct-offset>
  */
+
+typedef ErisTypeInfo* (*NewCompoundCb) (const char* name,
+                                        uint32_t    size,
+                                        uint32_t    n_members);
+
 static ErisTypeInfo*
-structure_members (ErisLibrary *library,
-                   Dwarf_Die    d_member_die,
-                   Dwarf_Error *d_error,
-                   const char  *struct_name,
-                   uint32_t     struct_size,
-                   uint32_t     index)
+compound_type_members (ErisLibrary  *library,
+                       Dwarf_Die     d_member_die,
+                       Dwarf_Error  *d_error,
+                       NewCompoundCb compound_new,
+                       const char   *compound_name,
+                       uint32_t      compound_size,
+                       uint32_t      index)
 {
     CHECK_NOT_NULL (library);
-    CHECK_NOT_NULL (d_member_die);
     CHECK_NOT_NULL (d_error);
+    CHECK_NOT_NULL (compound_new);
 
-    Dwarf_Unsigned d_member_offset;
-    if (!dw_die_get_uint_attr (library->d_debug,
-                               d_member_die,
-                               DW_AT_data_member_location,
-                               &d_member_offset,
-                               d_error)) {
-        ON_TRACE (LMEM char* r = dw_die_repr (library->d_debug,
-                                              d_member_die));
-        TRACE ("%s::%s: cannot get DIE DW_AT_data_member_location (%s)\n",
-               compound_name ? compound_name : "@", r, dw_errmsg (*d_error));
+    if (!d_member_die) {
+        /* No more entries: create type information. */
+        return (*compound_new) (compound_name, compound_size, index);
+    }
+
+    Dwarf_Half d_tag;
+    if (dwarf_tag (d_member_die, &d_tag, d_error) != DW_DLV_OK) {
+        ON_TRACE (LMEM char *r = dw_die_repr (library->d_debug, d_member_die));
+        TRACE ("%s: cannot get tag (%s)\n", r, dw_errmsg (*d_error));
         return NULL;
     }
 
-    *d_error = DW_DLE_NE;
-    const char *member_name = dw_die_get_string_attr (library->d_debug,
-                                                      d_member_die,
-                                                      DW_AT_name,
-                                                      d_error);
-    if (!member_name && *d_error != DW_DLE_NE) {
-        ON_TRACE (LMEM char* r = dw_die_repr (library->d_debug,
-                                              d_member_die));
-        TRACE ("%s::%s: cannot get member DIE DW_AT_name (%s)\n",
-               compound_name ? compound_name : "@",
-               r, dw_errmsg (*d_error));
-        return NULL;
-    }
+    dw_lstring_t member_name       = { library->d_debug };
+    Dwarf_Unsigned d_member_offset = DW_DLV_BADOFFSET;
+    const ErisTypeInfo *typeinfo   = NULL;
 
-    Dwarf_Off d_type_offset =
-            eris_library_get_die_ref_attribute_offset (library,
-                                                       d_member_die,
-                                                       DW_AT_type,
-                                                       d_error);
-    if (d_type_offset == DW_DLV_BADOFFSET) {
-        ON_TRACE (LMEM char* r = dw_die_repr (library->d_debug,
-                                              d_member_die));
-        TRACE ("%s::%s: cannot get member DIE DW_AT_type offset (%s)\n",
-               compound_name ? compound_name : "@", r, dw_errmsg (*d_error));
-        return NULL;
-    }
+    if (d_tag == DW_TAG_member) {
+        if (!dw_die_get_uint_attr (library->d_debug,
+                                   d_member_die,
+                                   DW_AT_data_member_location,
+                                   &d_member_offset,
+                                   d_error)) {
+            ON_TRACE (LMEM char* r = dw_die_repr (library->d_debug,
+                                                  d_member_die));
+            TRACE ("%s::%s: cannot get DIE DW_AT_data_member_location (%s)\n",
+                   compound_name ? compound_name : "@", r, dw_errmsg (*d_error));
+            return NULL;
+        }
 
-    const ErisTypeInfo *typeinfo = eris_library_lookup_type (library,
-                                                             d_type_offset,
-                                                             d_error);
-    if (!typeinfo) {
-        ON_TRACE (LMEM char* r = dw_die_repr (library->d_debug,
-                                              d_member_die));
-        TRACE ("%s::%s: cannot get member type information (%s)\n",
-               compound_name ? compound_name : "@", r, dw_errmsg (*d_error));
-        return NULL;
+        if (!(typeinfo = eris_library_fetch_die_type_ref_cached (library,
+                                                                 d_member_die,
+                                                                 DW_AT_type,
+                                                                 d_error))) {
+            ON_TRACE (LMEM char *r = dw_die_repr (library->d_debug, d_member_die));
+            TRACE ("%s::%s: cannot get type information (%s)\n",
+                   compound_name ? compound_name : "@", r, dw_errmsg (*d_error));
+            return NULL;
+        }
+
+        *d_error = DW_DLE_NE;
+        member_name.string = dw_die_name (d_member_die, d_error);
+        if (!member_name.string && *d_error != DW_DLE_NE) {
+            ON_TRACE (LMEM char* r = dw_die_repr (library->d_debug,
+                                                  d_member_die));
+            TRACE ("%s::%s: cannot get member DIE DW_AT_name (%s)\n",
+                   compound_name ? compound_name : "@",
+                   r, dw_errmsg (*d_error));
+            return NULL;
+        }
     }
 
     /*
-     * At this point we have valid member_name, d_member_offset, and typeinfo.
+     * Advance to the next item.
      */
-    Dwarf_Die d_next_member_die = NULL;
+    dw_ldie_t next_member = { library->d_debug };
     int status = dwarf_siblingof (library->d_debug,
                                   d_member_die,
-                                  &d_next_member_die,
+                                  &next_member.die,
                                   d_error);
-
+    if (status == DW_DLV_ERROR) {
+        ON_TRACE (LMEM char* r = dw_die_repr (library->d_debug, d_member_die));
+        TRACE ("%s::%s: cannot get member next sibling (%s)\n",
+               compound_name ? compound_name : "@", r, dw_errmsg (*d_error));
+        return NULL;
+    }
     if (status == DW_DLV_NO_ENTRY) {
-        /* No more entries. Create a ErisTypeInfo and fill-in member entry. */
-        ErisTypeInfo *result = eris_typeinfo_new_struct (struct_name,
-                                                         struct_size,
-                                                         index + 1);
-        ErisTypeInfoMember *member = eris_typeinfo_struct_member (result,
-                                                                  index);
-        member->typeinfo = typeinfo;
-        member->offset   = d_member_offset;
-        member->name     = member_name;
-        return result;
+        CHECK (next_member.die == NULL);
     }
 
-    if (status == DW_DLV_OK) {
-        ErisTypeInfo *result = structure_members (library,
-                                                  d_next_member_die,
+    ErisTypeInfo *result = compound_type_members (library,
+                                                  next_member.die,
                                                   d_error,
-                                                  struct_name,
-                                                  struct_size,
-                                                  index + 1);
-        dwarf_dealloc (library->d_debug, d_next_member_die, DW_DLA_DIE);
-        if (result) {
-            ErisTypeInfoMember *member = eris_typeinfo_struct_member (result,
-                                                                      index);
-            member->typeinfo = typeinfo;
-            member->offset   = d_member_offset;
-            member->name     = member_name;
-        }
-        return result;
+                                                  compound_new,
+                                                  compound_name,
+                                                  compound_size,
+                                                  typeinfo ? index + 1 : index);
+    if (result && typeinfo) {
+        ErisTypeInfoMember *member = eris_typeinfo_compound_member (result,
+                                                                    index);
+        member->name     = member_name.string ? strdup (member_name.string) : NULL;
+        member->offset   = (uint32_t) d_member_offset;
+        member->typeinfo = typeinfo;
+    }
+    return result;
+}
+
+
+static const ErisTypeInfo*
+eris_library_build_union_type_typeinfo (ErisLibrary *library,
+                                        Dwarf_Die    d_type_die,
+                                        Dwarf_Error *d_error)
+{
+    CHECK_NOT_NULL (library);
+    CHECK_NOT_NULL (d_type_die);
+    CHECK_NOT_NULL (d_error);
+    CHECK (*d_error == DW_DLE_NE);
+
+    dw_lstring_t name = {
+        library->d_debug,
+        dw_die_name (d_type_die, d_error)
+    };
+
+    if (*d_error != DW_DLE_NE) {
+        ON_TRACE (LMEM char *r = dw_die_repr (library->d_debug, d_type_die));
+        TRACE ("%s: cannot get name (%s)\n", r, dw_errmsg (*d_error));
+        return NULL;
     }
 
-    CHECK_INT_EQ (DW_DLV_ERROR, status);
-    ON_TRACE (LMEM char* r = dw_die_repr (library->d_debug, d_member_die));
-    TRACE ("%s::%s: cannot get member DIE sibling (%s)\n",
-           compound_name ? compound_name : "@", r, dw_errmsg (*d_error));
-    return NULL;
+    Dwarf_Unsigned d_byte_size;
+    if (!dw_die_get_uint_attr (library->d_debug,
+                               d_type_die,
+                               DW_AT_byte_size,
+                               &d_byte_size,
+                               d_error)) {
+        ON_TRACE (LMEM char *r = dw_die_repr (library->d_debug, d_type_die));
+        TRACE ("%s: cannot get DW_AT_byte_size (%s)\n", r, dw_errmsg (*d_error));
+        return NULL;
+    }
+
+    dw_ldie_t child = { library->d_debug };
+    if (dwarf_child (d_type_die, &child.die, d_error) != DW_DLV_OK)
+        return NULL;
+
+    return compound_type_members (library,
+                                  child.die,
+                                  d_error,
+                                  eris_typeinfo_new_union,
+                                  name.string,
+                                  d_byte_size,
+                                  0);
 }
 
 
@@ -1883,16 +1935,25 @@ eris_library_build_structure_type_typeinfo (ErisLibrary *library,
         return eris_typeinfo_new_struct (name, 0, 0);
     }
 
-    Dwarf_Die d_child_die = NULL;
-    if (dwarf_child (d_type_die, &d_child_die, d_error) != DW_DLV_OK)
+    dw_ldie_t child = { library->d_debug };
+    int status = dwarf_child (d_type_die, &child.die, d_error);
+    if (status == DW_DLV_ERROR) {
+        ON_TRACE (LMEM char *r = dw_die_repr (library->d_debug, d_type_die));
+        TRACE ("%s: cannot obtain child DIE (%s)\n", r, dw_errmsg (*d_error));
         return NULL;
+    }
 
-    return structure_members (library,
-                              d_child_die,
-                              d_error,
-                              name,
-                              d_byte_size,
-                              0);
+    if (status == DW_DLV_NO_ENTRY) {
+        CHECK (child.die == NULL);
+    }
+
+    return compound_type_members (library,
+                                  child.die,
+                                  d_error,
+                                  eris_typeinfo_new_struct,
+                                  name,
+                                  d_byte_size,
+                                  0);
 }
 
 
@@ -1923,8 +1984,12 @@ eris_library_build_typeinfo (ErisLibrary *library,
 
 #undef BUILD_TYPEINFO
 
-            default:
+            default: {
+                ON_TRACE (LMEM char *r = dw_die_repr (library->d_debug,
+                                                      d_type_die));
+                TRACE ("%s: unsupported tag %#x\n", r, d_tag);
                 result = NULL;
+            }
         }
     }
 

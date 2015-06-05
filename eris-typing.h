@@ -32,18 +32,26 @@
     F (DOUBLE, double, double) \
     F (FLOAT,  float,  float)
 
-#define BASE_TYPES(F) \
-    INTEGER_TYPES (F) \
-    FLOAT_TYPES (F)   \
-    F (POINTER, pointer, uintptr_t)
+#define BASE_TYPES(F)    \
+    INTEGER_TYPES (F)    \
+    FLOAT_TYPES (F)      \
+    F (BOOL, bool, bool) \
+    F (POINTER, pointer, void*)
 
-#define SYNTHETIC_TYPES(F)     \
-    F (TYPEDEF, typedef, void) \
-    F (CONST,   const,   void)
+#define SYNTHETIC_TYPES(F)        \
+    F (TYPEDEF, typedef, typedef) \
+    F (CONST,   const,   const)
 
-#define COMPOUND_TYPES(F)    \
-    F (STRUCT, struct, void) \
-    F (ARRAY,  array,  void)
+#define COMPOUND_TYPES(F)      \
+    F (STRUCT, struct, struct) \
+    F (UNION, union, union)    \
+    F (ARRAY,  array,  array)
+
+#define CONST_TYPES(F)   \
+    INTEGER_TYPES (F)    \
+    FLOAT_TYPES (F)      \
+    F (BOOL, bool, bool) \
+    F (VOID, void, void)
 
 #define ALL_TYPES(F)    \
     BASE_TYPES (F)      \
@@ -82,6 +90,15 @@ DECLARE_ERIS_TYPE_IS (COMPOUND,  compound)
 
 typedef struct _ErisTypeInfo ErisTypeInfo;
 
+#define DECL_CONST_TYPEINFO_ITEM(suffix, name, ctype) \
+    extern const ErisTypeInfo *eris_typeinfo_ ## name;
+
+CONST_TYPES (DECL_CONST_TYPEINFO_ITEM)
+extern const ErisTypeInfo *eris_typeinfo_pointer;
+
+#undef DECL_CONST_TYPEINFO_ITEM
+
+
 typedef struct {
     const char         *name;
     uint32_t            offset;
@@ -93,13 +110,14 @@ extern ErisTypeInfo* eris_typeinfo_new_const   (const ErisTypeInfo *base);
 extern ErisTypeInfo* eris_typeinfo_new_pointer (const ErisTypeInfo *base);
 extern ErisTypeInfo* eris_typeinfo_new_typedef (const ErisTypeInfo *base,
                                                 const char         *name);
-extern ErisTypeInfo* eris_typeinfo_new_base    (ErisType    type,
-                                                const char *name);
 extern ErisTypeInfo* eris_typeinfo_new_array   (const ErisTypeInfo *base,
                                                 uint64_t            n_items);
 extern ErisTypeInfo* eris_typeinfo_new_struct  (const char *name,
                                                 uint32_t    size,
                                                 uint32_t    n_members);
+extern ErisTypeInfo* eris_typeinfo_new_union (const char *name,
+                                              uint32_t    size,
+                                              uint32_t    n_members);
 
 extern void eris_typeinfo_free (ErisTypeInfo *typeinfo);
 
@@ -111,8 +129,8 @@ extern bool        eris_typeinfo_equal (const ErisTypeInfo *a,
                                         const ErisTypeInfo *b);
 extern uint32_t    eris_typeinfo_sizeof (const ErisTypeInfo *typeinfo);
 extern uint64_t    eris_typeinfo_array_n_items (const ErisTypeInfo* typeinfo);
-extern uint32_t    eris_typeinfo_struct_n_members (const ErisTypeInfo *typeinfo);
 extern bool        eris_typeinfo_struct_is_opaque (const ErisTypeInfo *typeinfo);
+extern uint32_t    eris_typeinfo_compound_n_members (const ErisTypeInfo *typeinfo);
 
 extern bool eris_typeinfo_get_const (const ErisTypeInfo *typeinfo);
 extern const ErisTypeInfo* eris_typeinfo_get_struct (const ErisTypeInfo *typeinfo);
@@ -120,18 +138,18 @@ extern const ErisTypeInfo* eris_typeinfo_get_non_synthetic (const ErisTypeInfo *
 
 
 extern ErisTypeInfoMember*
-eris_typeinfo_struct_named_member (ErisTypeInfo *typeinfo,
-                                   const char   *name);
+eris_typeinfo_compound_named_member (ErisTypeInfo *typeinfo,
+                                     const char   *name);
 extern ErisTypeInfoMember*
-eris_typeinfo_struct_member (ErisTypeInfo *typeinfo,
-                             uint32_t      index);
+eris_typeinfo_compound_member (ErisTypeInfo *typeinfo,
+                               uint32_t      index);
 
 extern const ErisTypeInfoMember*
-eris_typeinfo_struct_const_named_member (const ErisTypeInfo *typeinfo,
-                                         const char         *name);
+eris_typeinfo_compound_const_named_member (const ErisTypeInfo *typeinfo,
+                                           const char         *name);
 extern const ErisTypeInfoMember*
-eris_typeinfo_struct_const_member (const ErisTypeInfo *typeinfo,
-                                   uint32_t            index);
+eris_typeinfo_compound_const_member (const ErisTypeInfo *typeinfo,
+                                     uint32_t            index);
 
 #define DECLARE_TYPEINFO_IS_TYPE(suffix, name, ctype) \
     static inline bool eris_typeinfo_is_ ## name (const ErisTypeInfo *typeinfo) { \

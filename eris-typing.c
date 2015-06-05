@@ -13,14 +13,14 @@
 #include <string.h>
 
 struct TI_base {
-    const char         *name;
+    char               *name;
     uint32_t            size;
 };
 struct TI_pointer {
     const ErisTypeInfo *typeinfo;
 };
 struct TI_typedef {
-    const char         *name;
+    char               *name;
     const ErisTypeInfo *typeinfo;
 };
 struct TI_const {
@@ -30,8 +30,8 @@ struct TI_array {
     const ErisTypeInfo *typeinfo;
     uint64_t            n_items;
 };
-struct TI_struct {
-    const char         *name;
+struct TI_compound {
+    char               *name;
     uint32_t            size;
     uint32_t            n_members;
     ErisTypeInfoMember  members[];
@@ -41,14 +41,38 @@ struct TI_struct {
 struct _ErisTypeInfo {
     ErisType type;
     union {
-        struct TI_base    ti_base;
-        struct TI_pointer ti_pointer;
-        struct TI_typedef ti_typedef;
-        struct TI_const   ti_const;
-        struct TI_array   ti_array;
-        struct TI_struct  ti_struct;
+        struct TI_base     ti_base;
+        struct TI_pointer  ti_pointer;
+        struct TI_typedef  ti_typedef;
+        struct TI_const    ti_const;
+        struct TI_array    ti_array;
+        struct TI_compound ti_compound;
     };
 };
+
+
+#define DEF_CONST_TYPEINFO_ITEM(suffix, tname, ctype) \
+    const ErisTypeInfo *eris_typeinfo_ ## tname =     \
+        &((ErisTypeInfo) {                            \
+          .type = ERIS_TYPE_ ## suffix,               \
+          .ti_base.name = #ctype,                     \
+          .ti_base.size = sizeof (ctype)              \
+        });
+
+CONST_TYPES (DEF_CONST_TYPEINFO_ITEM)
+
+#undef DEF_CONST_TYPEINFO_ITEM
+
+const ErisTypeInfo *eris_typeinfo_pointer =
+    &((ErisTypeInfo) {
+        .type = ERIS_TYPE_POINTER,
+        .ti_pointer.typeinfo =
+            &((ErisTypeInfo) {
+                .type = ERIS_TYPE_VOID,
+                .ti_base.name = "void",
+                .ti_base.size = 0,
+            }),
+    });
 
 
 #if ERIS_TRACE
@@ -73,11 +97,18 @@ trace_tname (const ErisTypeInfo *typeinfo)
             trace_tname (typeinfo->ti_array.typeinfo);
             TRACE (">[%lu]", (long unsigned) typeinfo->ti_array.n_items);
             break;
+        case ERIS_TYPE_UNION:
         case ERIS_TYPE_STRUCT:
-            TRACE (">struct %s", typeinfo->ti_struct.name ? : "{}");
+            TRACE (">%s %s",
+                   (typeinfo->type == ERIS_TYPE_STRUCT) ? "struct" : "union",
+                   (typeinfo->ti_compound.name
+                        ? typeinfo->ti_compound.name
+                        : "{}"));
             break;
         default:
-            TRACE (">%s", typeinfo->ti_base.name ? : eris_type_name (typeinfo->type));
+            TRACE (">%s", typeinfo->ti_base.name
+                            ? typeinfo->ti_base.name
+                            : eris_type_name (typeinfo->type));
     }
 }
 # define TNAME(t) \
@@ -97,11 +128,7 @@ eris_type_name (ErisType type)
 #define TYPE_NAME_ITEM(suffix, name, ctype) \
         case ERIS_TYPE_ ## suffix: return #ctype;
 
-    switch (type) {
-        INTEGER_TYPES (TYPE_NAME_ITEM)
-        FLOAT_TYPES (TYPE_NAME_ITEM)
-        default: return NULL;
-    }
+    switch (type) { ALL_TYPES (TYPE_NAME_ITEM) }
 
 #undef TYPE_NAME_ITEM
 }
@@ -136,28 +163,32 @@ eris_typeinfo_new (ErisType type, uint32_t n_members)
 void
 eris_typeinfo_free (ErisTypeInfo *typeinfo)
 {
+    if (true
+#define CHECK_IS_CONST_TYPEINFO(_, tname, __) \
+            || (typeinfo == eris_typeinfo_ ## tname)
+        CONST_TYPES (CHECK_IS_CONST_TYPEINFO)
+#undef CHECK_IS_CONST_TYPEINFO
+       ) {
+        TTRACE (!, typeinfo);
+        TRACE ("Attempted to free constant typeinfo\n");
+        return;
+    }
+
     TTRACE (<, typeinfo);
+    switch (typeinfo->type) {
+        case ERIS_TYPE_TYPEDEF:
+            free (typeinfo->ti_typedef.name);
+            break;
+
+        case ERIS_TYPE_UNION:
+        case ERIS_TYPE_STRUCT:
+            free (typeinfo->ti_compound.name);
+            break;
+
+        default:
+            break;
+    }
     free (typeinfo);
-}
-
-
-ErisTypeInfo*
-eris_typeinfo_new_base (ErisType    type,
-                        const char *name)
-{
-    CHECK_UINT_NE (ERIS_TYPE_VOID,    type);
-    CHECK_UINT_NE (ERIS_TYPE_POINTER, type);
-    CHECK_UINT_NE (ERIS_TYPE_TYPEDEF, type);
-    CHECK_UINT_NE (ERIS_TYPE_CONST,   type);
-    CHECK_UINT_NE (ERIS_TYPE_ARRAY,   type);
-    CHECK_UINT_NE (ERIS_TYPE_STRUCT,  type);
-
-    ErisTypeInfo *typeinfo = eris_typeinfo_new (type, 0);
-    typeinfo->ti_base.name = name ? name : eris_type_name (type);
-    typeinfo->ti_base.size = eris_type_size (type);
-
-    TTRACE (>, typeinfo);
-    return typeinfo;
 }
 
 
@@ -195,8 +226,8 @@ eris_typeinfo_new_typedef (const ErisTypeInfo *base,
     CHECK_NOT_NULL (name);
 
     ErisTypeInfo *typeinfo = eris_typeinfo_new (ERIS_TYPE_TYPEDEF, 0);
-    typeinfo->ti_typedef.typeinfo = base,
-    typeinfo->ti_typedef.name     = name;
+    typeinfo->ti_typedef.name     = strdup (name);
+    typeinfo->ti_typedef.typeinfo = base;
 
     TTRACE (>, typeinfo);
     return typeinfo;
@@ -224,14 +255,28 @@ eris_typeinfo_new_struct (const char *name,
                           uint32_t    n_members)
 {
     ErisTypeInfo *typeinfo = eris_typeinfo_new (ERIS_TYPE_STRUCT, n_members);
-    typeinfo->ti_struct.name      = name ? name : "<struct>";
-    typeinfo->ti_struct.size      = size;
-    typeinfo->ti_struct.n_members = n_members;
+    typeinfo->ti_compound.name      = strdup (name ? name : "@");
+    typeinfo->ti_compound.size      = size;
+    typeinfo->ti_compound.n_members = n_members;
 
     TTRACE (>, typeinfo);
     return typeinfo;
 }
 
+
+ErisTypeInfo*
+eris_typeinfo_new_union (const char *name,
+                         uint32_t    size,
+                         uint32_t    n_members)
+{
+    ErisTypeInfo *typeinfo = eris_typeinfo_new (ERIS_TYPE_UNION, n_members);
+    typeinfo->ti_compound.name      = strdup (name ? name : "@");
+    typeinfo->ti_compound.size      = size;
+    typeinfo->ti_compound.n_members = n_members;
+
+    TTRACE (>, typeinfo);
+    return typeinfo;
+}
 
 const char*
 eris_typeinfo_name (const ErisTypeInfo *typeinfo)
@@ -241,18 +286,25 @@ eris_typeinfo_name (const ErisTypeInfo *typeinfo)
     switch (typeinfo->type) {
         case ERIS_TYPE_VOID:
             return "void";
+
+        case ERIS_TYPE_UNION:
         case ERIS_TYPE_STRUCT:
-            return typeinfo->ti_struct.name;
+            return typeinfo->ti_compound.name;
+
         case ERIS_TYPE_POINTER:
             return eris_typeinfo_name (typeinfo->ti_pointer.typeinfo);
+
         case ERIS_TYPE_TYPEDEF:
             return typeinfo->ti_typedef.name
                  ? typeinfo->ti_typedef.name
                  : eris_typeinfo_name (typeinfo->ti_typedef.typeinfo);
+
         case ERIS_TYPE_CONST:
             return eris_typeinfo_name (typeinfo->ti_const.typeinfo);
+
         case ERIS_TYPE_ARRAY:
             return eris_typeinfo_name (typeinfo->ti_array.typeinfo);
+
         default:
             return typeinfo->ti_base.name;
     }
@@ -268,12 +320,13 @@ eris_typeinfo_type (const ErisTypeInfo *typeinfo)
 
 
 uint32_t
-eris_typeinfo_struct_n_members (const ErisTypeInfo *typeinfo)
+eris_typeinfo_compound_n_members (const ErisTypeInfo *typeinfo)
 {
     CHECK_NOT_NULL (typeinfo);
-    CHECK_UINT_EQ (ERIS_TYPE_STRUCT, typeinfo->type);
+    CHECK (typeinfo->type == ERIS_TYPE_STRUCT ||
+           typeinfo->type == ERIS_TYPE_UNION);
 
-    return typeinfo->ti_struct.n_members;
+    return typeinfo->ti_compound.n_members;
 }
 
 
@@ -283,8 +336,8 @@ eris_typeinfo_struct_is_opaque (const ErisTypeInfo *typeinfo)
     CHECK_NOT_NULL (typeinfo);
     CHECK_UINT_EQ (ERIS_TYPE_STRUCT, typeinfo->type);
 
-    return typeinfo->ti_struct.n_members == 0
-        && typeinfo->ti_struct.size == 0;
+    return typeinfo->ti_compound.n_members == 0
+        && typeinfo->ti_compound.size == 0;
 }
 
 
@@ -315,8 +368,9 @@ eris_typeinfo_sizeof (const ErisTypeInfo *typeinfo)
         case ERIS_TYPE_ARRAY:
             return eris_typeinfo_sizeof (typeinfo->ti_array.typeinfo) *
                    typeinfo->ti_array.n_items;
+        case ERIS_TYPE_UNION:
         case ERIS_TYPE_STRUCT:
-            return typeinfo->ti_struct.size;
+            return typeinfo->ti_compound.size;
         default:
             return typeinfo->ti_base.size;
     }
@@ -411,18 +465,19 @@ eris_typeinfo_equal (const ErisTypeInfo *a,
                 && eris_typeinfo_equal (a->ti_array.typeinfo,
                                         b->ti_array.typeinfo);
 
+        case ERIS_TYPE_UNION:
         case ERIS_TYPE_STRUCT:
-            if (a->ti_struct.size != b->ti_struct.size ||
-                a->ti_struct.n_members != b->ti_struct.n_members ||
-                !string_equal (a->ti_struct.name, b->ti_struct.name)) {
+            if (a->ti_compound.size != b->ti_compound.size ||
+                a->ti_compound.n_members != b->ti_compound.n_members ||
+                !string_equal (a->ti_compound.name, b->ti_compound.name)) {
                     return false;
             }
             /* Check struct members. */
-            for (uint32_t i = 0; i < a->ti_struct.n_members; i++) {
-                if (!string_equal (a->ti_struct.members[i].name,
-                                   b->ti_struct.members[i].name) ||
-                    !eris_typeinfo_equal (a->ti_struct.members[i].typeinfo,
-                                          b->ti_struct.members[i].typeinfo))
+            for (uint32_t i = 0; i < a->ti_compound.n_members; i++) {
+                if (!string_equal (a->ti_compound.members[i].name,
+                                   b->ti_compound.members[i].name) ||
+                    !eris_typeinfo_equal (a->ti_compound.members[i].typeinfo,
+                                          b->ti_compound.members[i].typeinfo))
                         return false;
             }
             return true;
@@ -435,52 +490,57 @@ eris_typeinfo_equal (const ErisTypeInfo *a,
 
 
 const ErisTypeInfoMember*
-eris_typeinfo_struct_const_named_member (const ErisTypeInfo *typeinfo,
-                                         const char         *name)
+eris_typeinfo_compound_const_named_member (const ErisTypeInfo *typeinfo,
+                                           const char         *name)
 {
     CHECK_NOT_NULL (typeinfo);
-    CHECK_UINT_EQ (ERIS_TYPE_STRUCT, typeinfo->type);
     CHECK_NOT_NULL (name);
+    CHECK (typeinfo->type == ERIS_TYPE_STRUCT ||
+           typeinfo->type == ERIS_TYPE_UNION);
 
-    for (uint32_t i = 0; i < typeinfo->ti_struct.n_members; i++)
-        if (string_equal (name, typeinfo->ti_struct.members[i].name))
-            return &typeinfo->ti_struct.members[i];
+    for (uint32_t i = 0; i < typeinfo->ti_compound.n_members; i++)
+        if (string_equal (name, typeinfo->ti_compound.members[i].name))
+            return &typeinfo->ti_compound.members[i];
     return NULL;
 }
 
 
 ErisTypeInfoMember*
-eris_typeinfo_struct_named_member (ErisTypeInfo *typeinfo,
-                                   const char   *name)
+eris_typeinfo_compound_named_member (ErisTypeInfo *typeinfo,
+                                     const char   *name)
 {
     CHECK_NOT_NULL (typeinfo);
     CHECK_NOT_NULL (name);
+    CHECK (typeinfo->type == ERIS_TYPE_STRUCT ||
+           typeinfo->type == ERIS_TYPE_UNION);
 
     return (ErisTypeInfoMember*)
-        eris_typeinfo_struct_const_named_member (typeinfo, name);
+        eris_typeinfo_compound_const_named_member (typeinfo, name);
 }
 
 
 const ErisTypeInfoMember*
-eris_typeinfo_struct_const_member (const ErisTypeInfo *typeinfo,
-                                   uint32_t            index)
+eris_typeinfo_compound_const_member (const ErisTypeInfo *typeinfo,
+                                     uint32_t            index)
 {
     CHECK_NOT_NULL (typeinfo);
-    CHECK_UINT_EQ (ERIS_TYPE_STRUCT, typeinfo->type);
-    CHECK_U32_LT (typeinfo->ti_struct.n_members, index);
+    CHECK (typeinfo->type == ERIS_TYPE_STRUCT ||
+           typeinfo->type == ERIS_TYPE_UNION);
+    CHECK_U32_LT (typeinfo->ti_compound.n_members, index);
 
-    return &typeinfo->ti_struct.members[index];
+    return &typeinfo->ti_compound.members[index];
 }
 
 
 ErisTypeInfoMember*
-eris_typeinfo_struct_member (ErisTypeInfo *typeinfo,
-                             uint32_t      index)
+eris_typeinfo_compound_member (ErisTypeInfo *typeinfo,
+                               uint32_t      index)
 {
     CHECK_NOT_NULL (typeinfo);
-    CHECK_UINT_EQ (ERIS_TYPE_STRUCT, typeinfo->type);
-    CHECK_U32_LT (typeinfo->ti_struct.n_members, index);
+    CHECK (typeinfo->type == ERIS_TYPE_STRUCT ||
+           typeinfo->type == ERIS_TYPE_UNION);
+    CHECK_U32_LT (typeinfo->ti_compound.n_members, index);
 
     return (ErisTypeInfoMember*)
-        eris_typeinfo_struct_const_member (typeinfo, index);
+        eris_typeinfo_compound_const_member (typeinfo, index);
 }
