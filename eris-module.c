@@ -923,7 +923,22 @@ cvalue_push (lua_State          *L,
         case ERIS_TYPE_BOOL:
             lua_pushboolean (L, ((bool*) address)[index]);
             return 1;
+
+        case ERIS_TYPE_POINTER:
+            if (!((void**) address)[0]) {
+                /* Map NULL pointers to "nil". */
+                lua_pushnil (L);
+                return 1;
+            }
+            /* fall-through */
         case ERIS_TYPE_ARRAY:
+            eris_variable_push_userdata (L,
+                                         NULL,
+                                         eris_typeinfo_base (typeinfo),
+                                         ((void**) address)[index],
+                                         NULL);
+            return 1;
+
         case ERIS_TYPE_STRUCT:
             address += eris_typeinfo_sizeof (typeinfo) * index;
             eris_variable_push_userdata (L,
