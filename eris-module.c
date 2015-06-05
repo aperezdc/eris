@@ -629,19 +629,11 @@ make_variable_wrapper (lua_State   *L,
                        Dwarf_Half   d_tag)
 {
     Dwarf_Error d_error = DW_DLE_NE;
-    Dwarf_Off d_offset =
-            eris_library_get_die_ref_attribute_offset (library,
-                                                       d_die,
-                                                       DW_AT_type,
-                                                       &d_error);
-    if (d_offset == DW_DLV_BADOFFSET) {
-        return luaL_error (L, "%s: could not obtain DW_AT_type offset (%s)",
-                           name, dw_errmsg (d_error));
-    }
-
-    const ErisTypeInfo* typeinfo = eris_library_lookup_type (library,
-                                                             d_offset,
-                                                             &d_error);
+    const ErisTypeInfo* typeinfo =
+            eris_library_fetch_die_type_ref_cached (library,
+                                                    d_die,
+                                                    DW_AT_type,
+                                                    &d_error);
     if (!typeinfo) {
         DW_TRACE_DIE_ERROR ("%s: cannot get type information\n",
                             library->d_debug, d_die, d_error, name);
@@ -1588,34 +1580,28 @@ eris_library_build_typedef_typeinfo (ErisLibrary *library,
     CHECK_NOT_NULL (d_type_die);
     CHECK_NOT_NULL (d_error);
 
-    const char *name = dw_die_get_string_attr (library->d_debug,
-                                               d_type_die,
-                                               DW_AT_name,
-                                               d_error);
-    if (!name) {
-        TRACE ("cannot get TUE DW_AT_name (%s)\n", dw_errmsg (*d_error));
-        return NULL;
-    }
-
-    Dwarf_Off d_offset =
-            eris_library_get_die_ref_attribute_offset (library,
-                                                       d_type_die,
-                                                       DW_AT_type,
-                                                       d_error);
-    if (d_offset == DW_DLV_BADOFFSET) {
-        TRACE ("cannot get TUE offset (%s)\n", dw_errmsg (*d_error));
-        return NULL;
-    }
-
     const ErisTypeInfo *base =
-            eris_library_lookup_type (library, d_offset, d_error);
+            eris_library_fetch_die_type_ref_cached (library,
+                                                    d_type_die,
+                                                    DW_AT_type,
+                                                    d_error);
     if (!base) {
         DW_TRACE_DIE_ERROR ("cannot get type info\n",
                             library->d_debug, d_type_die, *d_error);
         return NULL;
     }
 
-    return eris_typeinfo_new_typedef (base, name);
+    dw_lstring_t name = {
+        library->d_debug,
+        dw_die_name (d_type_die, d_error)
+    };
+    if (!name.string) {
+        DW_TRACE_DIE_ERROR ("cannot get name\n",
+                            library->d_debug, d_type_die, *d_error);
+        return NULL;
+    }
+
+    return eris_typeinfo_new_typedef (base, name.string);
 }
 
 
@@ -1682,23 +1668,20 @@ eris_library_build_array_type_typeinfo (ErisLibrary *library,
     if (!dw_tue_array_get_n_items (library->d_debug,
                                    d_type_die,
                                    &n_items,
-                                   d_error))
-        return NULL;
-
-    Dwarf_Off d_offset =
-            eris_library_get_die_ref_attribute_offset (library,
-                                                       d_type_die,
-                                                       DW_AT_type,
-                                                       d_error);
-    if (d_offset == DW_DLV_BADOFFSET) {
-        TRACE ("cannot get TUE offset (%s)\n", dw_errmsg (*d_error));
+                                   d_error)) {
+        DW_TRACE_DIE_ERROR ("cannot get array items\n",
+                            library->d_debug, d_type_die, *d_error);
         return NULL;
     }
 
     const ErisTypeInfo *base =
-            eris_library_lookup_type (library, d_offset, d_error);
+            eris_library_fetch_die_type_ref_cached (library,
+                                                    d_type_die,
+                                                    DW_AT_type,
+                                                    d_error);
     if (!base) {
-        TRACE ("cannot get TUE (%s)\n", dw_errmsg (*d_error));
+        DW_TRACE_DIE_ERROR ("cannot get TUE\n",
+                            library->d_debug, d_type_die, *d_error);
         return NULL;
     }
 
@@ -1715,20 +1698,13 @@ eris_library_build_const_type_typeinfo (ErisLibrary *library,
     CHECK_NOT_NULL (d_type_die);
     CHECK_NOT_NULL (d_error);
 
-    Dwarf_Off d_offset =
-            eris_library_get_die_ref_attribute_offset (library,
-                                                       d_type_die,
-                                                       DW_AT_type,
-                                                       d_error);
-    if (d_offset == DW_DLV_BADOFFSET) {
-        TRACE ("cannot get TUE offset (%s)\n", dw_errmsg (*d_error));
-        return NULL;
-    }
-
     const ErisTypeInfo *base =
-            eris_library_lookup_type (library, d_offset, d_error);
+            eris_library_fetch_die_type_ref_cached (library,
+                                                    d_type_die,
+                                                    DW_AT_type,
+                                                    d_error);
     if (!base) {
-        DW_TRACE_DIE_ERROR ("cannot get TUE\n",
+        DW_TRACE_DIE_ERROR ("cannot get base type\n",
                             library->d_debug, d_type_die, *d_error);
         return NULL;
     }
