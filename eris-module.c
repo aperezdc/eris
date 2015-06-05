@@ -692,11 +692,6 @@ eris_library_index (lua_State *L)
     CHECK (!symbol_is_private);
 #endif /* ERIS_RUNTIME_CHECKS */
 
-    if (symbol_is_private) {
-        error = "symbol is private";
-        goto dealloc_die_and_return_error;
-    }
-
     /* Obtain the DIE type tag. */
     Dwarf_Half d_tag;
     if (dwarf_tag (d_die,
@@ -725,7 +720,6 @@ eris_library_index (lua_State *L)
             /* fall-through */
     }
 
-dealloc_die_and_return_error:
     dwarf_dealloc (e->d_debug, d_die, DW_DLA_DIE);
 return_error:
     lua_pushnil (L);
