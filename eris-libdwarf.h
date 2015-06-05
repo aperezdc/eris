@@ -140,4 +140,23 @@ dw_errmsg (Dwarf_Error e)
     return e ? dwarf_errmsg (e) : "no libdwarf error";
 }
 
+
+#if ERIS_TRACE
+# define DW_TRACE_DIE(fmt, dbg, die, ...)                 \
+    do {                                                  \
+        LMEM char *die_repr = dw_die_repr ((dbg), (die)); \
+        TRACE (BROWN "%s" NORMAL " " fmt,                 \
+               die_repr, ##__VA_ARGS__);                  \
+    } while (0)
+# define DW_TRACE_DIE_ERROR(fmt, dbg, die, ...)           \
+    do {                                                  \
+        LMEM char *die_repr = dw_die_repr ((dbg), (die)); \
+        TRACE (BROWN "%s " NORMAL "{" RED "%s" NORMAL     \
+               "} " fmt, die_repr, __VA_ARGS__);          \
+    } while (0);
+#else
+# define DW_TRACE_DIE(...)       ((void) 0)
+# define DW_TRACE_DIE_ERROR(...) ((void) 0)
+#endif
+
 #endif /* !ERIS_LIBDWARF_H */

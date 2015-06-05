@@ -14,7 +14,6 @@
 # undef ERIS_TRACE
 # define ERIS_TRACE 1
 
-# define ON_TRACE(x) x
 # define TRACE(...)                                                 \
     do {                                                            \
         if (eris_trace_enabled)                                     \
@@ -54,16 +53,26 @@ extern bool eris_trace_enabled;
 # define ERIS_TRACE 0
 # define eris_trace_setup( )  ((void)0)
 # define TRACE(...)           ((void)0)
-# define ON_TRACE(x)          ((void)0)
 #endif /* ERIS_TRACE */
 
-#define NORMAL "[0;0m"
-#define GREEN  "[1;32m"
-#define WHITE  "[1;1m"
-#define YELLOW "[1;31m"
-#define CYAN   "[0;36m"
+#define NORMAL  "[0;0m"
+#define WHITE   "[1;1m"
 
-#define TRACE_PTR(hint, t, ptr, after) \
-    TRACE (">" #hint CYAN " " #t GREEN " %p" NORMAL after, (ptr))
+#define RED     "[0;31m"
+#define GREEN   "[0;32m"
+#define BROWN   "[0;33m"
+#define MAGENTA "[0;35m"
+#define CYAN    "[0;36m"
+#define GREY    "[0;37m"
+
+#define BRED    "[1;31m"
+#define BGREEN  "[1;32m"
+#define YELLOW  "[1;33m"
+#define BLUE    "[1;34m"
+#define PINK    "[1;35m"
+#define BCYAN   "[1;36m"
+
+#define TRACE_PTR(hint, t, ptr, fmt, ...) \
+    TRACE (">" #hint CYAN " " #t GREEN " %p" NORMAL fmt, (ptr), ##__VA_ARGS__)
 
 #endif /* !ERIS_TRACE_H */

@@ -484,8 +484,9 @@ function_parameters (lua_State          *L,
 
     Dwarf_Half d_tag;
     if (dwarf_tag (d_param_die, &d_tag, d_error) != DW_DLV_OK) {
-        TRACE ("%s(%d): cannot get DAWRF DIE tag (%s)\n",
-               func_name, index, dw_errmsg (*d_error));
+        DW_TRACE_DIE_ERROR ("%s[%d]: cannot get tag\n",
+                            library->d_debug, d_param_die, *d_error,
+                            func_name, index);
         return NULL;
     }
 
@@ -495,11 +496,14 @@ function_parameters (lua_State          *L,
                                                                  d_param_die,
                                                                  DW_AT_type,
                                                                  d_error))) {
-            TRACE ("%s(%d): cannot get type information (%s)\n",
-                   func_name, index, dw_errmsg (*d_error));
+            DW_TRACE_DIE_ERROR ("%s[%d]: cannot get type information\n",
+                                library->d_debug, d_param_die, *d_error,
+                                func_name, index);
             return NULL;
         }
-        TRACE ("%s(%d): typeinfo %p\n", func_name, index, typeinfo);
+        DW_TRACE_DIE ("%s[%d]: type " GREEN "%p\n" NORMAL,
+                      library->d_debug, d_param_die,
+                      func_name, index, typeinfo);
     }
 
     /*
@@ -511,8 +515,8 @@ function_parameters (lua_State          *L,
                                   &d_next_param_die,
                                   d_error);
     if (status == DW_DLV_ERROR) {
-        TRACE ("%s(%d): cannot get param DIE sibling (%s)\n",
-               func_name, index, dw_errmsg (*d_error));
+        DW_TRACE_DIE_ERROR ("%s[%d]: cannot get sibling\n",
+                            library->d_debug, d_param_die, func_name, index);
         return NULL;
     }
     if (status == DW_DLV_NO_ENTRY) {
@@ -555,14 +559,18 @@ make_function_wrapper (lua_State   *L,
                                                       &d_error)
             : eris_typeinfo_void;
     if (!return_typeinfo) {
-        return luaL_error (L, "%s(): cannot get return type information (%s)\n",
+        DW_TRACE_DIE_ERROR ("%s: cannot get return type\n",
+                            library->d_debug, d_die, d_error, name);
+        return luaL_error (L, "%s: cannot get return type information (%s)\n",
                            name, dw_errmsg (d_error));
     }
-    TRACE ("%s(): return type " GREEN "%p\n" NORMAL, name, return_typeinfo);
+    TRACE ("%s[@]: return type " GREEN "%p\n" NORMAL, name, return_typeinfo);
 
     Dwarf_Die d_child_die;
     int status = dwarf_child (d_die, &d_child_die, &d_error);
     if (status == DW_DLV_ERROR) {
+        DW_TRACE_DIE_ERROR ("%s: cannot get child\n",
+                            library->d_debug, d_die, d_error, name);
         return luaL_error (L, "%s: cannot obtain child DIE (%s)\n",
                            name, dw_errmsg (d_error));
     }
@@ -580,8 +588,10 @@ make_function_wrapper (lua_State   *L,
                                             0);
     dwarf_dealloc (library->d_debug, d_child_die, DW_DLA_DIE);
     if (!ef) {
-        return luaL_error (L, "%s(): cannot get type information for "
-                           "parameters (%s)\n", name, dw_errmsg (d_error));
+        DW_TRACE_DIE_ERROR ("%s: cannot get parameter types\n",
+                            library->d_debug, d_die, d_error, name);
+        return luaL_error (L, "%s: cannot get parameter types (%s)",
+                           name, dw_errmsg (d_error));
     }
     TRACE ("new ErisFunction* at %p (%p:%s)\n", ef, library, name);
     return 1;
@@ -604,10 +614,8 @@ eris_variable_push_userdata (lua_State          *L,
     V->typeinfo_owned = false;
     luaL_setmetatable (L, ERIS_VARIABLE);
 
-    TRACE_PTR (+, ErisVariable, V, " ");
-    TRACE (">type " GREEN "%p" NORMAL " (%s)\n",
-           typeinfo, name ? name : "?");
-
+    TRACE_PTR (+, ErisVariable, V, " type " GREEN "%p" NORMAL "(%s)\n"
+               typeinfo, name ? name : "?");
     return V;
 }
 
@@ -635,6 +643,8 @@ make_variable_wrapper (lua_State   *L,
                                                              d_offset,
                                                              &d_error);
     if (!typeinfo) {
+        DW_TRACE_DIE_ERROR ("%s: cannot get type information\n",
+                            library->d_debug, d_die, d_error, name);
         return luaL_error (L, "%s: could not obtain type information (%s)",
                            dw_errmsg (d_error));
     }
@@ -755,8 +765,7 @@ eris_function_gc (lua_State *L)
 {
     ErisFunction *ef = to_eris_function (L);
 
-    TRACE_PTR (<, ErisFunction, ef, "");
-    TRACE (">(%s)\n", ef->name ? ef->name : "?");
+    TRACE_PTR (<, ErisFunction, ef, " (%s)\n", ef->name ? ef->name : "?");
 
     eris_symbol_free ((ErisSymbol*) ef);
     return 0;
@@ -811,9 +820,8 @@ eris_variable_gc (lua_State *L)
 {
     ErisVariable *ev = to_eris_variable (L);
 
-    TRACE_PTR (<, ErisVariable, ev, " ");
-    TRACE (">type " GREEN "%p" NORMAL " (%s)\n",
-           ev->typeinfo, ev->name ? ev->name : "?");
+    TRACE_PTR (<, ErisVariable, ev, " type " GREEN "%p" NORMAL " (%s)\n",
+               ev->typeinfo, ev->name ? ev->name : "?");
 
     if (ev->typeinfo_owned) {
         eris_typeinfo_free (ev->typeinfo);
@@ -1149,8 +1157,7 @@ eris_load (lua_State *L)
     ErisLibrary *library = NULL;
     for (library = library_list; library; library = library->next) {
         if (string_equal (path, library->path)) {
-            TRACE_PTR (+, ErisLibrary, library, "");
-            TRACE ("> [%s]\n", library->path);
+            TRACE_PTR (+, ErisLibrary, library, " [%s]\n", library->path);
             eris_library_push_userdata (L, library);
             return 1;
         }
@@ -1205,10 +1212,10 @@ eris_load (lua_State *L)
         char *name = NULL;
         Dwarf_Error d_name_error = DW_DLE_NE;
         if (dwarf_globname (d_globals[i], &name, &d_name_error) == DW_DLV_OK) {
-            TRACE ("-- [%li] %s\n", (long) i, name);
+            TRACE (">  [%li] %s\n", (long) i, name);
             dwarf_dealloc (d_debug, name, DW_DLA_STRING);
         } else {
-            TRACE ("-- [%li] ERROR: %s\n", (long) i, dw_errmsg (d_name_error));
+            TRACE (">  [%li] ERROR: %s\n", (long) i, dw_errmsg (d_name_error));
         }
     }
 #endif /* ERIS_TRACE */
@@ -1233,10 +1240,10 @@ eris_load (lua_State *L)
         char *name = NULL;
         Dwarf_Error d_name_error = DW_DLE_NE;
         if (dwarf_pubtypename (d_types[i], &name, &d_name_error) == DW_DLV_OK) {
-            TRACE ("-- [%li] %s\n", (long) i, name);
+            TRACE (">  [%li] %s\n", (long) i, name);
             dwarf_dealloc (d_debug, name, DW_DLA_STRING);
         } else {
-            TRACE ("-- [%li] ERROR: %s\n", (long) i, dw_errmsg (d_name_error));
+            TRACE (">  [%li] ERROR: %s\n", (long) i, dw_errmsg (d_name_error));
         }
     }
 #endif /* ERIS_TRACE */
@@ -1255,8 +1262,7 @@ eris_load (lua_State *L)
     eris_type_cache_init (&el->type_cache);
     eris_library_push_userdata (L, el);
 
-    TRACE_PTR (>, ErisLibrary, el, "");
-    TRACE ("> [%s]\n", el->path);
+    TRACE_PTR (>, ErisLibrary, el, " [%s]\n", el->path);
 
     return 1;
 }
@@ -1604,7 +1610,8 @@ eris_library_build_typedef_typeinfo (ErisLibrary *library,
     const ErisTypeInfo *base =
             eris_library_lookup_type (library, d_offset, d_error);
     if (!base) {
-        TRACE ("cannot get TUE (%s)\n", dw_errmsg (*d_error));
+        DW_TRACE_DIE_ERROR ("cannot get type info\n",
+                            library->d_debug, d_type_die, *d_error);
         return NULL;
     }
 
@@ -1628,8 +1635,8 @@ eris_library_fetch_die_type_ref_cached (ErisLibrary *library,
                                                        d_tag,
                                                        d_error);
     if (d_offset == DW_DLV_BADOFFSET) {
-        ON_TRACE (LMEM char *r = dw_die_repr (library->d_debug, d_die));
-        TRACE ("%s: cannot get DIE offset (%s)\n", r, dw_errmsg (*d_error));
+        DW_TRACE_DIE_ERROR ("cannot get attribute offset\n",
+                            library->d_debug, d_die, *d_error);
         return NULL;
     }
 
@@ -1653,8 +1660,8 @@ eris_library_build_pointer_type_typeinfo (ErisLibrary *library,
                                                     DW_AT_type,
                                                     d_error);
     if (!base) {
-        ON_TRACE (LMEM char* r = dw_die_repr (library->d_debug, d_type_die));
-        TRACE ("%s: cannot get typeinfo (%s)\n", r, dw_errmsg (*d_error));
+        DW_TRACE_DIE_ERROR ("cannot get typeinfo\n",
+                            library->d_debug, d_type_die, *d_error);
         return NULL;
     }
 
@@ -1721,7 +1728,8 @@ eris_library_build_const_type_typeinfo (ErisLibrary *library,
     const ErisTypeInfo *base =
             eris_library_lookup_type (library, d_offset, d_error);
     if (!base) {
-        TRACE ("cannot get TUE (%s)\n", dw_errmsg (*d_error));
+        DW_TRACE_DIE_ERROR ("cannot get TUE\n",
+                            library->d_debug, d_type_die, *d_error);
         return NULL;
     }
 
@@ -1773,10 +1781,12 @@ compound_type_members (ErisLibrary  *library,
         return (*compound_new) (compound_name, compound_size, index);
     }
 
+    DW_TRACE_DIE ("\n", library->d_debug, d_member_die);
+
     Dwarf_Half d_tag;
     if (dwarf_tag (d_member_die, &d_tag, d_error) != DW_DLV_OK) {
-        ON_TRACE (LMEM char *r = dw_die_repr (library->d_debug, d_member_die));
-        TRACE ("%s: cannot get tag (%s)\n", r, dw_errmsg (*d_error));
+        DW_TRACE_DIE_ERROR ("cannot get tag\n",
+                            library->d_debug, d_member_die, *d_error);
         return NULL;
     }
 
@@ -1790,10 +1800,9 @@ compound_type_members (ErisLibrary  *library,
                                    DW_AT_data_member_location,
                                    &d_member_offset,
                                    d_error)) {
-            ON_TRACE (LMEM char* r = dw_die_repr (library->d_debug,
-                                                  d_member_die));
-            TRACE ("%s::%s: cannot get DIE DW_AT_data_member_location (%s)\n",
-                   compound_name ? compound_name : "@", r, dw_errmsg (*d_error));
+            DW_TRACE_DIE_ERROR ("%s: cannot get DW_AT_data_member_location\n",
+                                library->d_debug, d_member_die, *d_error,
+                                compound_name ? compound_name : "@");
             return NULL;
         }
 
@@ -1801,20 +1810,18 @@ compound_type_members (ErisLibrary  *library,
                                                                  d_member_die,
                                                                  DW_AT_type,
                                                                  d_error))) {
-            ON_TRACE (LMEM char *r = dw_die_repr (library->d_debug, d_member_die));
-            TRACE ("%s::%s: cannot get type information (%s)\n",
-                   compound_name ? compound_name : "@", r, dw_errmsg (*d_error));
+            DW_TRACE_DIE_ERROR ("%s: cannot get type information\n",
+                                library->d_debug, d_member_die, *d_error,
+                                compound_name ? compound_name : "@");
             return NULL;
         }
 
         *d_error = DW_DLE_NE;
         member_name.string = dw_die_name (d_member_die, d_error);
         if (!member_name.string && *d_error != DW_DLE_NE) {
-            ON_TRACE (LMEM char* r = dw_die_repr (library->d_debug,
-                                                  d_member_die));
-            TRACE ("%s::%s: cannot get member DIE DW_AT_name (%s)\n",
-                   compound_name ? compound_name : "@",
-                   r, dw_errmsg (*d_error));
+            DW_TRACE_DIE_ERROR ("%s: cannot get name\n",
+                                library->d_debug, d_member_die, *d_error,
+                                compound_name ? compound_name : "@");
             return NULL;
         }
     }
@@ -1828,9 +1835,9 @@ compound_type_members (ErisLibrary  *library,
                                   &next_member.die,
                                   d_error);
     if (status == DW_DLV_ERROR) {
-        ON_TRACE (LMEM char* r = dw_die_repr (library->d_debug, d_member_die));
-        TRACE ("%s::%s: cannot get member next sibling (%s)\n",
-               compound_name ? compound_name : "@", r, dw_errmsg (*d_error));
+        DW_TRACE_DIE_ERROR ("%s: cannot get next sibling\n",
+                            library->d_debug, d_member_die, *d_error,
+                            compound_name ? compound_name : "@");
         return NULL;
     }
     if (status == DW_DLV_NO_ENTRY) {
@@ -1865,14 +1872,16 @@ eris_library_build_union_type_typeinfo (ErisLibrary *library,
     CHECK_NOT_NULL (d_error);
     CHECK (*d_error == DW_DLE_NE);
 
+    DW_TRACE_DIE ("\n", library->d_debug, d_type_die);
+
     dw_lstring_t name = {
         library->d_debug,
         dw_die_name (d_type_die, d_error)
     };
 
     if (*d_error != DW_DLE_NE) {
-        ON_TRACE (LMEM char *r = dw_die_repr (library->d_debug, d_type_die));
-        TRACE ("%s: cannot get name (%s)\n", r, dw_errmsg (*d_error));
+        DW_TRACE_DIE_ERROR ("cannot get name\n",
+                            library->d_debug, d_type_die, *d_error);
         return NULL;
     }
 
@@ -1882,8 +1891,8 @@ eris_library_build_union_type_typeinfo (ErisLibrary *library,
                                DW_AT_byte_size,
                                &d_byte_size,
                                d_error)) {
-        ON_TRACE (LMEM char *r = dw_die_repr (library->d_debug, d_type_die));
-        TRACE ("%s: cannot get DW_AT_byte_size (%s)\n", r, dw_errmsg (*d_error));
+        DW_TRACE_DIE_ERROR ("cannot get DW_AT_byte_size\n",
+                            library->d_debug, d_type_die, *d_error);
         return NULL;
     }
 
@@ -1932,8 +1941,8 @@ eris_library_build_structure_type_typeinfo (ErisLibrary *library,
     dw_ldie_t child = { library->d_debug };
     int status = dwarf_child (d_type_die, &child.die, d_error);
     if (status == DW_DLV_ERROR) {
-        ON_TRACE (LMEM char *r = dw_die_repr (library->d_debug, d_type_die));
-        TRACE ("%s: cannot obtain child DIE (%s)\n", r, dw_errmsg (*d_error));
+        DW_TRACE_DIE_ERROR ("cannot obtain child\n",
+                            library->d_debug, d_type_die, *d_error);
         return NULL;
     }
 
@@ -1978,12 +1987,10 @@ eris_library_build_typeinfo (ErisLibrary *library,
 
 #undef BUILD_TYPEINFO
 
-            default: {
-                ON_TRACE (LMEM char *r = dw_die_repr (library->d_debug,
-                                                      d_type_die));
-                TRACE ("%s: unsupported tag %#x\n", r, d_tag);
+            default:
+                DW_TRACE_DIE ("unsupported tag %#x\n",
+                              library->d_debug, d_type_die, (unsigned) d_tag);
                 result = NULL;
-            }
         }
     }
 
