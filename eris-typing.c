@@ -285,9 +285,6 @@ eris_typeinfo_name (const ErisTypeInfo *typeinfo)
     CHECK_NOT_NULL (typeinfo);
 
     switch (typeinfo->type) {
-        case ERIS_TYPE_VOID:
-            return "void";
-
         case ERIS_TYPE_UNION:
         case ERIS_TYPE_STRUCT:
             return typeinfo->ti_compound.name;
