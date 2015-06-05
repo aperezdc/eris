@@ -132,8 +132,8 @@ l_eris_typeinfo_index (lua_State *L)
     const ErisTypeInfo *typeinfo = to_eris_typeinfo (L, 1);
     lua_settop (L, 2);
     if (lua_isinteger (L, 2)) {
-        if (!(typeinfo = eris_typeinfo_get_struct (typeinfo))) {
-            return luaL_error (L, "type is not a struct");
+        if (!(typeinfo = eris_typeinfo_get_compound (typeinfo))) {
+            return luaL_error (L, "type is not a struct or union");
         }
 
         uint32_t n_members = eris_typeinfo_compound_n_members (typeinfo);
@@ -171,8 +171,8 @@ static int
 l_eris_typeinfo_len (lua_State *L)
 {
     const ErisTypeInfo *typeinfo = to_eris_typeinfo (L, 1);
-    if (!(typeinfo = eris_typeinfo_get_struct (typeinfo))) {
-        return luaL_error (L, "type is not a struct");
+    if (!(typeinfo = eris_typeinfo_get_compound (typeinfo))) {
+        return luaL_error (L, "type is not a struct or union");
     }
     lua_pushinteger (L, eris_typeinfo_compound_n_members (typeinfo));
     return 1;
@@ -1370,8 +1370,8 @@ eris_offsetof (lua_State *L)
 
     CHECK_NOT_NULL (typeinfo);
 
-    if (!(typeinfo = eris_typeinfo_get_struct (typeinfo))) {
-        return luaL_error (L, "parameter #1 is not a struct");
+    if (!(typeinfo = eris_typeinfo_get_compound (typeinfo))) {
+        return luaL_error (L, "parameter #1 is not a struct or union");
     }
 
     const ErisTypeInfoMember *member;

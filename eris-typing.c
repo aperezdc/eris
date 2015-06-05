@@ -379,15 +379,18 @@ eris_typeinfo_sizeof (const ErisTypeInfo *typeinfo)
 
 
 const ErisTypeInfo*
-eris_typeinfo_get_struct (const ErisTypeInfo *typeinfo)
+eris_typeinfo_get_compound (const ErisTypeInfo *typeinfo)
 {
     CHECK_NOT_NULL (typeinfo);
 
-    if (typeinfo->type == ERIS_TYPE_STRUCT)
-        return typeinfo;
-
-    typeinfo = eris_typeinfo_base (typeinfo);
-    return typeinfo ? eris_typeinfo_get_struct (typeinfo) : NULL;
+    switch (typeinfo->type) {
+        case ERIS_TYPE_UNION:
+        case ERIS_TYPE_STRUCT:
+            return typeinfo;
+        default:
+            typeinfo = eris_typeinfo_base (typeinfo);
+            return typeinfo ? eris_typeinfo_get_compound (typeinfo) : NULL;
+    }
 }
 
 

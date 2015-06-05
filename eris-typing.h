@@ -133,7 +133,7 @@ extern bool        eris_typeinfo_struct_is_opaque (const ErisTypeInfo *typeinfo)
 extern uint32_t    eris_typeinfo_compound_n_members (const ErisTypeInfo *typeinfo);
 
 extern bool eris_typeinfo_get_const (const ErisTypeInfo *typeinfo);
-extern const ErisTypeInfo* eris_typeinfo_get_struct (const ErisTypeInfo *typeinfo);
+extern const ErisTypeInfo* eris_typeinfo_get_compound (const ErisTypeInfo *typeinfo);
 extern const ErisTypeInfo* eris_typeinfo_get_non_synthetic (const ErisTypeInfo *typeinfo);
 
 
