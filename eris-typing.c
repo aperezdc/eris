@@ -118,7 +118,8 @@ trace_tname (const ErisTypeInfo *typeinfo)
          TNAME (t); TRACE (">" NORMAL ")\n"); } while (0)
 
 #else
-# define TNAME(t) ((void) 0)
+# define TNAME(t)        ((void) 0)
+# define TTRACE(hint, t) ((void) 0)
 #endif
 
 
