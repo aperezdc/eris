@@ -53,10 +53,11 @@
     F (BOOL, bool, bool) \
     F (VOID, void, void)
 
-#define ALL_TYPES(F)    \
-    BASE_TYPES (F)      \
-    SYNTHETIC_TYPES (F) \
-    COMPOUND_TYPES (F)  \
+#define ALL_TYPES(F)     \
+    BASE_TYPES (F)       \
+    SYNTHETIC_TYPES (F)  \
+    COMPOUND_TYPES (F)   \
+    F (ENUM, enum, enum) \
     F (VOID, void, void)
 
 
@@ -100,9 +101,14 @@ extern const ErisTypeInfo *eris_typeinfo_pointer;
 
 
 typedef struct {
-    const char         *name;
-    uint32_t            offset;
-    const ErisTypeInfo *typeinfo;
+    const char                 *name;
+    union {
+        int64_t                 value;    /* ERIS_TYPE_ENUM           */
+        struct {
+            uint32_t            offset;   /* ERIS_TYPE_{UNION,STRUCT} */
+            const ErisTypeInfo *typeinfo; /* ditto.                   */
+        };
+    };
 } ErisTypeInfoMember;
 
 
@@ -115,6 +121,9 @@ extern ErisTypeInfo* eris_typeinfo_new_array   (const ErisTypeInfo *base,
 extern ErisTypeInfo* eris_typeinfo_new_struct  (const char *name,
                                                 uint32_t    size,
                                                 uint32_t    n_members);
+extern ErisTypeInfo* eris_typeinfo_new_enum (const char *name,
+                                             uint32_t    size,
+                                             uint32_t    n_members);
 extern ErisTypeInfo* eris_typeinfo_new_union (const char *name,
                                               uint32_t    size,
                                               uint32_t    n_members);

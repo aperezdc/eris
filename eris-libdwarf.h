@@ -37,6 +37,7 @@
     F (array_type)           \
     F (pointer_type)         \
     F (union_type)           \
+    F (enumeration_type)     \
     F (structure_type)
 
 #define DW_DEALLOC_TYPES(F)                    \
@@ -112,6 +113,19 @@ dw_die_get_uint_attrb (const dw_die_t  dd,
                        Dwarf_Unsigned *out,
                        Dwarf_Error    *e)
 { return dw_die_get_uint_attr (dd.debug, dd.die, tag, out, e); }
+
+
+extern bool dw_die_get_sint_attr (Dwarf_Debug   dbg,
+                                  Dwarf_Die     die,
+                                  Dwarf_Half    tag,
+                                  Dwarf_Signed *out,
+                                  Dwarf_Error  *e);
+static inline bool
+dw_die_get_sint_attrb (const dw_die_t dd,
+                       Dwarf_Half     tag,
+                       Dwarf_Signed  *out,
+                       Dwarf_Error   *e)
+{ return dw_die_get_sint_attr (dd.debug, dd.die, tag, out, e); }
 
 
 extern bool

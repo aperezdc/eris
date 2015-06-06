@@ -1954,6 +1954,166 @@ eris_library_build_union_type_typeinfo (ErisLibrary *library,
 }
 
 
+/*
+ * An enum like this:
+ *
+ *   enum Foo {
+ *     FOO_FROB,
+ *     FOO_BAR,
+ *   };
+ *
+ * Becomes:
+ *
+ *   DW_TAG_enumeration_type
+ *     DW_AT_name           Foo
+ *     DW_AT_byte_size      4
+ *     DW_TAG_enumerator
+ *       DW_AT_name         FOO_FROB
+ *       DW_AT_const_value  0
+ *     DW_TAG_enumerator
+ *       DW_AT_name         FOO_BAR
+ *       DW_AT_const_value  1
+ */
+static ErisTypeInfo*
+enum_members (Dwarf_Debug  d_debug,
+              Dwarf_Die    d_member_die,
+              Dwarf_Error *d_error,
+              const char  *enum_name,
+              uint32_t     enum_size,
+              uint32_t     index)
+{
+    CHECK_NOT_NULL (d_debug);
+    CHECK_NOT_NULL (d_error);
+
+    if (!d_member_die) {
+        /* No more entries: create type information. */
+        return eris_typeinfo_new_enum (enum_name, enum_size, index);
+    }
+
+    DW_TRACE_DIE ("\n", d_debug, d_member_die);
+
+    Dwarf_Half d_tag;
+    if (dwarf_tag (d_member_die, &d_tag, d_error) != DW_DLV_OK) {
+        DW_TRACE_DIE_ERROR ("cannot get tag\n",
+                            d_debug, d_member_die, *d_error);
+        return NULL;
+    }
+
+    dw_lstring_t member_name = { d_debug };
+    Dwarf_Signed d_value     = 0;
+
+    if (d_tag == DW_TAG_enumerator) {
+        if (!dw_die_get_sint_attr (d_debug,
+                                   d_member_die,
+                                   DW_AT_const_value,
+                                   &d_value,
+                                   d_error)) {
+            DW_TRACE_DIE_ERROR ("%s: cannot get DW_AT_const_value\n",
+                                d_debug, d_member_die, *d_error,
+                                enum_name ? enum_name : "#");
+            return NULL;
+        }
+
+        CHECK (*d_error == DW_DLE_NE);
+        member_name.string = dw_die_name (d_member_die, d_error);
+        if (!member_name.string) {
+            DW_TRACE_DIE_ERROR ("%s: cannot get name\n",
+                                d_debug, d_member_die, *d_error,
+                                enum_name ? enum_name : "#");
+            return NULL;
+        }
+    }
+
+    /*
+     * Advance to the next item.
+     */
+    dw_ldie_t next_member = { d_debug };
+    switch (dwarf_siblingof (d_debug, d_member_die, &next_member.die, d_error)) {
+        case DW_DLV_ERROR:
+            DW_TRACE_DIE_ERROR ("%s: cannot get next sibling\n",
+                                d_debug, d_member_die, *d_error,
+                                enum_name ? enum_name : "#");
+            return NULL;
+        case DW_DLV_NO_ENTRY:
+            CHECK (next_member.die == NULL);
+        case DW_DLV_OK:
+            break;
+        default:
+            CHECK_UNREACHABLE ();
+    }
+
+    ErisTypeInfo *result =
+            enum_members (d_debug,
+                          next_member.die,
+                          d_error,
+                          enum_name,
+                          enum_size,
+                          member_name.string ? index + 1 : index);
+
+    if (result && member_name.string) {
+        ErisTypeInfoMember *member = eris_typeinfo_compound_member (result,
+                                                                    index);
+        member->name  = strdup (member_name.string);
+        member->value = (int64_t) d_value;
+    }
+    return result;
+}
+
+
+static const ErisTypeInfo*
+eris_library_build_enumeration_type_typeinfo (ErisLibrary *library,
+                                              Dwarf_Die    d_type_die,
+                                              Dwarf_Error *d_error)
+{
+    CHECK_NOT_NULL (library);
+    CHECK_NOT_NULL (d_type_die);
+    CHECK_NOT_NULL (d_error);
+    CHECK (*d_error == DW_DLE_NE);
+
+    Dwarf_Unsigned d_byte_size;
+    if (!dw_die_get_uint_attr (library->d_debug,
+                               d_type_die,
+                               DW_AT_byte_size,
+                               &d_byte_size,
+                               d_error)) {
+        DW_TRACE_DIE_ERROR ("cannot get DW_AT_byte_size\n",
+                            library->d_debug, d_type_die, *d_error);
+        return NULL;
+    }
+
+    dw_lstring_t name = {
+        library->d_debug,
+        dw_die_name (d_type_die, d_error),
+    };
+    if (!name.string && *d_error != DW_DLE_NE) {
+        DW_TRACE_DIE_ERROR ("cannot get name\n",
+                            library->d_debug, d_type_die, *d_error);
+        return NULL;
+    }
+
+    dw_ldie_t child = { library->d_debug };
+    switch (dwarf_child (d_type_die, &child.die, d_error)) {
+        case DW_DLV_ERROR:
+            DW_TRACE_DIE_ERROR ("cannot obtain child\n",
+                                library->d_debug, d_type_die, *d_error);
+            return NULL;
+        case DW_DLV_NO_ENTRY:
+            CHECK (child.die == NULL);
+        case DW_DLV_OK:
+            break;
+        default:
+            CHECK_UNREACHABLE ();
+    }
+
+    return enum_members (library->d_debug,
+                         child.die,
+                         d_error,
+                         name.string,
+                         d_byte_size,
+                         0);
+}
+
+
 static const ErisTypeInfo*
 eris_library_build_structure_type_typeinfo (ErisLibrary *library,
                                             Dwarf_Die    d_type_die,

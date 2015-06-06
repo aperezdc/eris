@@ -94,6 +94,23 @@ dw_die_get_uint_attr (Dwarf_Debug     dbg,
 
 
 bool
+dw_die_get_sint_attr (Dwarf_Debug   dbg,
+                      Dwarf_Die     die,
+                      Dwarf_Half    tag,
+                      Dwarf_Signed *out,
+                      Dwarf_Error  *e)
+{
+    CHECK_NOT_NULL (dbg);
+    CHECK_NOT_NULL (die);
+    CHECK_NOT_NULL (out);
+
+    dw_lattr_t value = { dbg };
+    return dwarf_attr (die, tag, &value.attr, e) == DW_DLV_OK
+        && dwarf_formsdata (value.attr, out, e) == DW_DLV_OK;
+}
+
+
+bool
 dw_tue_array_get_n_items (Dwarf_Debug     dbg,
                           Dwarf_Die       tue,
                           Dwarf_Unsigned *out,
