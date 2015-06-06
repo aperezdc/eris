@@ -7,16 +7,38 @@
 --
 
 local eris = require "eris"
-local nvg = eris.load "nanovg"
+
+--
+-- Makes functions available (and memoized) in the "nvg" table,
+-- plus types in the "nvg.types" table. Note that prefixes are
+-- added automatically when looking up items from the library.
+--
+local _nanovg = eris.load "nanovg"
+local nvg = setmetatable({
+	types = setmetatable({}, {
+		__index = function (self, key)
+			local t = rawget(self, key)
+			if t == nil then
+				t = eris.type(_nanovg, "NVG" .. key)
+				rawset(self, key, t or false)
+			end
+			return t
+		end,
+	}),
+}, {
+	__index = function (self, key)
+		local f = rawget(self, key)
+		if f == nil then
+			f = _nanovg["nvg" .. key]
+			rawset(self, key, f or false)
+		end
+		return f
+	end,
+});
+
 
 local W = 800
 local H = 600
-
-local nvgBeginPath, nvgMoveTo, nvgBezierTo, nvgLineTo =
-	nvg.nvgBeginPath, nvg.nvgMoveTo, nvg.nvgBezierTo, nvg.nvgLineTo
-local nvgLinearGradient, nvgFillPaint, nvgFill =
-	nvg.nvgLinearGradient, nvg.nvgFillPaint, nvg.nvgFill
-local nvgRGBA = nvg.nvgRGBA
 
 local function graph(vg, x, y, w, h, t)
 	local samples = {
@@ -29,38 +51,35 @@ local function graph(vg, x, y, w, h, t)
 	}
 
 	local dx = w / 5.0
-	local sx, sy
+	local sx = {}
+	local sy = {}
 	for i, sample in ipairs(samples) do
 		sx[i] = x + i * dx
 		sy[i] = y + h * sample * 0.8
 	end
 
-	local bg = nvgLinearGradient(vg, x, y, x, y + h,
-		nvgRGBA(0, 160, 192, 0), nvgRGBA(0, 160, 192, 0))
-	nvgBeginPath(vg)
-	nvgMoveTo(vg, sx[0], sy[0])
+	local bg = nvg.LinearGradient(vg, x, y, x, y + h,
+		nvg.RGBA(0, 160, 192, 0), nvg.RGBA(0, 160, 192, 0))
+	nvg.BeginPath(vg)
+	nvg.MoveTo(vg, sx[0], sy[0])
 	for i = 2, #sx do
-		nvgBezierTo(vg, dx[i-1] + dx * 0.5, sy[i-1] - dx * 0.5,
+		nvg.BezierTo(vg, dx[i-1] + dx * 0.5, sy[i-1] - dx * 0.5,
 			sy[i], sx[i], sy[i])
 	end
-	nvgLineTo(vg, x + w, y + h)
-	nvgLineTo(vg, x, y + h)
-	nvgFillPaint(vg, bg)
-	nvgFill(vg)
+	nvg.LineTo(vg, x + w, y + h)
+	nvg.LineTo(vg, x, y + h)
+	nvg.FillPaint(vg, bg)
+	nvg.Fill(vg)
 end
 
-local window = nvg.nvgWindow ("Lua + Eris + NanoVG", W, H)
-nvg.nvgMakeCurrent(window)
+local window = nvg.Window("Lua + Eris + NanoVG", W, H)
+nvg.MakeCurrent(window)
 
-local nvgFrameStart, nvgFrameEnd, nvgDone, nvgTime =
-	nvg.nvgFrameStart, nvg.nvgFrameEnd, nvg.nvgDone, nvg.nvgTime
+local vg = nvg.Create(true)
 
-local vg = nvg.nvgCreate(true)
-
-
-while not nvgDone(window) do
-	nvgFrameStart(window, vg)
-	graph(vg, 0, H/2, W, H/2, nvgTime())
-	nvgFrameEnd(window, vg)
+while not nvg.Done(window) do
+	nvg.FrameStart(window, vg)
+	graph(vg, 0, H/2, W, H/2, nvg.Time())
+	nvg.FrameEnd(window, vg)
 end
-nvg.nvgExit()
+nvg.Exit()
