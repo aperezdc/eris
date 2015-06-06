@@ -549,7 +549,8 @@ function_parameters (lua_State          *L,
                                   d_error);
     if (status == DW_DLV_ERROR) {
         DW_TRACE_DIE_ERROR ("%s[%d]: cannot get sibling\n",
-                            library->d_debug, d_param_die, func_name, index);
+                            library->d_debug, d_param_die, *d_error,
+                            func_name, index);
         return NULL;
     }
     if (status == DW_DLV_NO_ENTRY) {
@@ -579,6 +580,8 @@ make_function_wrapper (lua_State   *L,
                        Dwarf_Half   d_tag)
 {
     Dwarf_Error d_error = DW_DLE_NE;
+
+    TRACE (YELLOW "%s()" GREY " requested\n" NORMAL, name);
 
     Dwarf_Bool has_return;
     if (dwarf_hasattr (d_die, DW_AT_type, &has_return, &d_error) != DW_DLV_OK) {

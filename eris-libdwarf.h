@@ -148,11 +148,12 @@ dw_errmsg (Dwarf_Error e)
         TRACE (BROWN "%s" NORMAL " " fmt,                 \
                die_repr, ##__VA_ARGS__);                  \
     } while (0)
-# define DW_TRACE_DIE_ERROR(fmt, dbg, die, ...)           \
+# define DW_TRACE_DIE_ERROR(fmt, dbg, die, err, ...)      \
     do {                                                  \
         LMEM char *die_repr = dw_die_repr ((dbg), (die)); \
         TRACE (BROWN "%s " NORMAL "{" RED "%s" NORMAL     \
-               "} " fmt, die_repr, __VA_ARGS__);          \
+               "} " fmt, die_repr, dw_errmsg (err),       \
+               ##__VA_ARGS__);                            \
     } while (0);
 #else
 # define DW_TRACE_DIE(...)       ((void) 0)
