@@ -73,6 +73,8 @@ extern bool eris_trace_enabled;
 #define PINK    "[1;35m"
 #define BCYAN   "[1;36m"
 
+#define TODO    "[1;43;37mTODO:[0;0m "
+
 #define TRACE_PTR(hint, t, ptr, fmt, ...) \
     TRACE (">" #hint CYAN " " #t GREEN " %p" NORMAL fmt, (ptr), ##__VA_ARGS__)
 

@@ -2194,6 +2194,15 @@ eris_library_build_typeinfo (ErisLibrary *library,
 
 #undef BUILD_TYPEINFO
 
+            case DW_TAG_subroutine_type:
+                /*
+                 * TODO: Support function types. For now just pass function
+                 *       pointers around as opaque void* pointers.
+                 */
+                TRACE (TODO YELLOW "DW_TAG_subroutine_type" NORMAL "\n");
+                result = eris_typeinfo_void;
+                break;
+
             default:
                 DW_TRACE_DIE ("unsupported tag %#x\n",
                               library->d_debug, d_type_die, (unsigned) d_tag);
