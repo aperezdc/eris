@@ -21,6 +21,6 @@ function check_variable(variable, expected_name, expected_readonly,
 	end
 end
 
-check_variable(libtest.const_int, "const_int", true, "int")
+check_variable(libtest.const_int, "const_int", true, "int%d+_t")
 check_variable(libtest.var_u16, "var_u16", false, "uint16_t", 2)
-check_variable(libtest.intvar, "intvar", false, "int")
+check_variable(libtest.intvar, "intvar", false, "int%d+_t")
