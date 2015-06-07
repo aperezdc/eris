@@ -373,18 +373,23 @@ eris_typeinfo_sizeof (const ErisTypeInfo *typeinfo)
     switch (typeinfo->type) {
         case ERIS_TYPE_VOID:
             return 0;
+
         case ERIS_TYPE_POINTER:
             return sizeof (void*);
-        case ERIS_TYPE_TYPEDEF:
-            return eris_typeinfo_sizeof (typeinfo->ti_typedef.typeinfo);
+
         case ERIS_TYPE_CONST:
-            return eris_typeinfo_sizeof (typeinfo->ti_const.typeinfo);
+        case ERIS_TYPE_TYPEDEF:
+            return eris_typeinfo_sizeof (eris_typeinfo_base (typeinfo));
+
         case ERIS_TYPE_ARRAY:
-            return eris_typeinfo_sizeof (typeinfo->ti_array.typeinfo) *
+            return eris_typeinfo_sizeof (eris_typeinfo_base (typeinfo)) *
                    typeinfo->ti_array.n_items;
+
+        case ERIS_TYPE_ENUM:
         case ERIS_TYPE_UNION:
         case ERIS_TYPE_STRUCT:
             return typeinfo->ti_compound.size;
+
         default:
             return typeinfo->ti_base.size;
     }

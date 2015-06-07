@@ -12,7 +12,6 @@ static ffi_type*
 eris_fcall_ffi_map_type (const ErisTypeInfo *typeinfo,
                          size_t             *accumulator)
 {
-    typeinfo = eris_typeinfo_get_non_synthetic (typeinfo);
     *accumulator += eris_typeinfo_sizeof (typeinfo);
 
     switch (eris_typeinfo_type (typeinfo)) {
@@ -98,8 +97,7 @@ eris_function_call (lua_State *L)
 
     uintptr_t addr = (uintptr_t) scratch;
     if (ef->return_typeinfo) {
-        addr += eris_typeinfo_sizeof (
-               eris_typeinfo_get_non_synthetic (ef->return_typeinfo));
+        addr += eris_typeinfo_sizeof (ef->return_typeinfo);
     }
 
     /*
@@ -108,8 +106,7 @@ eris_function_call (lua_State *L)
     for (uint32_t i = 0; i < ef->n_param; i++) {
         params[i] = (void*) addr;
         cvalue_get (L, i + 2, ef->param_types[i], addr, 0);
-        addr += eris_typeinfo_sizeof (
-                eris_typeinfo_get_non_synthetic (ef->param_types[i]));
+        addr += eris_typeinfo_sizeof (ef->param_types[i]);
     }
 
     TRACE (FBLUE "%s()" NORMAL ": Invoking ... ", ef->name);
