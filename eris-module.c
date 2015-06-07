@@ -168,12 +168,19 @@ l_eris_typeinfo_index (lua_State *L)
         const ErisTypeInfoMember *member =
                 eris_typeinfo_compound_const_member (typeinfo, index - 1);
         lua_createtable (L, 0, 3);
+
         lua_pushstring (L, member->name);
         lua_setfield (L, -2, "name");
-        eris_typeinfo_push_userdata (L, member->typeinfo);
-        lua_setfield (L, -2, "type");
-        lua_pushinteger (L, member->offset);
-        lua_setfield (L, -2, "offset");
+
+        if (eris_typeinfo_is_enum (typeinfo)) {
+            lua_pushinteger (L, member->value);
+            lua_setfield (L, -2, "value");
+        } else {
+            eris_typeinfo_push_userdata (L, member->typeinfo);
+            lua_setfield (L, -2, "type");
+            lua_pushinteger (L, member->offset);
+            lua_setfield (L, -2, "offset");
+        }
     } else {
         const char *field = luaL_checkstring (L, 2);
         if (!strcmp ("name", field)) {
@@ -2122,13 +2129,13 @@ eris_library_build_structure_type_typeinfo (ErisLibrary *library,
     CHECK_NOT_NULL (library);
     CHECK_NOT_NULL (d_type_die);
     CHECK_NOT_NULL (d_error);
+    CHECK (*d_error == DW_DLE_NE);
 
-    *d_error = DW_DLE_NE;
-    const char *name = dw_die_get_string_attr (library->d_debug,
-                                               d_type_die,
-                                               DW_AT_name,
-                                               d_error);
-    if (*d_error != DW_DLE_NE) {
+    dw_lstring_t name = {
+        library->d_debug,
+        dw_die_name (d_type_die, d_error),
+    };
+    if (!name.string && *d_error != DW_DLE_NE) {
         TRACE ("cannot get TUE DW_AT_name (%s)\n", dw_errmsg (*d_error));
         return NULL;
     }
@@ -2139,7 +2146,7 @@ eris_library_build_structure_type_typeinfo (ErisLibrary *library,
                                DW_AT_byte_size,
                                &d_byte_size,
                                d_error)) {
-        return eris_typeinfo_new_struct (name, 0, 0);
+        return eris_typeinfo_new_struct (name.string, 0, 0);
     }
 
     dw_ldie_t child = { library->d_debug };
@@ -2158,7 +2165,7 @@ eris_library_build_structure_type_typeinfo (ErisLibrary *library,
                                   child.die,
                                   d_error,
                                   eris_typeinfo_new_struct,
-                                  name,
+                                  name.string,
                                   d_byte_size,
                                   0);
 }

@@ -78,6 +78,18 @@ Point triangle[] = {
 };
 
 
+enum Continent {
+    AFRICA,
+    EUROPE,
+    ASIA,
+    AMERICA,
+    ANTARCTICA,
+    AUSTRALIA,
+};
+
+enum Continent location = EUROPE;
+
+
 static int
 private_add (int a, int b)
 {
@@ -89,4 +101,11 @@ int
 add (int a, int b)
 {
     return private_add (a, b);
+}
+
+
+int
+get_intvar (void)
+{
+    return intvar;
 }

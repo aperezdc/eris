@@ -337,7 +337,8 @@ eris_typeinfo_compound_n_members (const ErisTypeInfo *typeinfo)
 {
     CHECK_NOT_NULL (typeinfo);
     CHECK (typeinfo->type == ERIS_TYPE_STRUCT ||
-           typeinfo->type == ERIS_TYPE_UNION);
+           typeinfo->type == ERIS_TYPE_UNION ||
+           typeinfo->type == ERIS_TYPE_ENUM);
 
     return typeinfo->ti_compound.n_members;
 }
@@ -396,6 +397,7 @@ eris_typeinfo_get_compound (const ErisTypeInfo *typeinfo)
     CHECK_NOT_NULL (typeinfo);
 
     switch (typeinfo->type) {
+        case ERIS_TYPE_ENUM:
         case ERIS_TYPE_UNION:
         case ERIS_TYPE_STRUCT:
             return typeinfo;
@@ -528,7 +530,8 @@ eris_typeinfo_compound_named_member (ErisTypeInfo *typeinfo,
     CHECK_NOT_NULL (typeinfo);
     CHECK_NOT_NULL (name);
     CHECK (typeinfo->type == ERIS_TYPE_STRUCT ||
-           typeinfo->type == ERIS_TYPE_UNION);
+           typeinfo->type == ERIS_TYPE_UNION ||
+           typeinfo->type == ERIS_TYPE_ENUM);
 
     return (ErisTypeInfoMember*)
         eris_typeinfo_compound_const_named_member (typeinfo, name);
@@ -541,7 +544,8 @@ eris_typeinfo_compound_const_member (const ErisTypeInfo *typeinfo,
 {
     CHECK_NOT_NULL (typeinfo);
     CHECK (typeinfo->type == ERIS_TYPE_STRUCT ||
-           typeinfo->type == ERIS_TYPE_UNION);
+           typeinfo->type == ERIS_TYPE_UNION ||
+           typeinfo->type == ERIS_TYPE_ENUM);
     CHECK_U32_LT (typeinfo->ti_compound.n_members, index);
 
     return &typeinfo->ti_compound.members[index];
@@ -554,7 +558,8 @@ eris_typeinfo_compound_member (ErisTypeInfo *typeinfo,
 {
     CHECK_NOT_NULL (typeinfo);
     CHECK (typeinfo->type == ERIS_TYPE_STRUCT ||
-           typeinfo->type == ERIS_TYPE_UNION);
+           typeinfo->type == ERIS_TYPE_UNION ||
+           typeinfo->type == ERIS_TYPE_ENUM);
     CHECK_U32_LT (typeinfo->ti_compound.n_members, index);
 
     return (ErisTypeInfoMember*)
