@@ -105,7 +105,7 @@ eris_function_call (lua_State *L)
      */
     for (uint32_t i = 0; i < ef->n_param; i++) {
         params[i] = (void*) addr;
-        cvalue_get (L, i + 2, ef->param_types[i], addr, 0);
+        cvalue_get (L, i + 2, ef->param_types[i], (void*) addr);
         addr += eris_typeinfo_sizeof (ef->param_types[i]);
     }
 

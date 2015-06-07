@@ -1011,9 +1011,9 @@ eris_variable_index (lua_State *L)
         case ERIS_TYPE_ARRAY: {
             L_BOUNDS_CHECK (index, 2, eris_typeinfo_array_n_items (T));
             T = eris_typeinfo_get_non_synthetic (eris_typeinfo_base (T));
-            return cvalue_push (L, T, ADDR_OFF (void,
-                                                V->address,
-                                                index * eris_typeinfo_sizeof (T)));
+            return cvalue_push (L, T,
+                                ADDR_OFF (void, V->address,
+                                          index * eris_typeinfo_sizeof (T)));
         }
         case ERIS_TYPE_STRUCT: {
             const ErisTypeInfoMember *member = NULL;
@@ -1033,30 +1033,34 @@ eris_variable_index (lua_State *L)
 }
 
 
-#define FLOAT_FROM_LUA(suffix, name, ctype) \
-        case ERIS_TYPE_ ## suffix:          \
-            ((ctype*) address)[index] = (ctype) luaL_checknumber (L, lindex); return 0;
-#define INTEGER_FROM_LUA(suffix, name, ctype) \
-        case ERIS_TYPE_ ## suffix:            \
-            ((ctype*) address)[index] = (ctype) luaL_checkinteger (L, lindex); return 0;
-#define SLOT(ctype) \
-        (((ctype*) address)[index])
+#define FLOAT_FROM_LUA(suffix, name, ctype)           \
+        case ERIS_TYPE_ ## suffix:                    \
+            *ADDR_OFF (ctype, address, 0) =           \
+                (ctype) luaL_checknumber (L, lindex); \
+            break;
+
+#define INTEGER_FROM_LUA(suffix, name, ctype)          \
+        case ERIS_TYPE_ ## suffix:                     \
+            *ADDR_OFF (ctype, address, 0) =            \
+                (ctype) luaL_checkinteger (L, lindex); \
+            break;
 
 static inline int
 cvalue_get (lua_State          *L,
             int                 lindex,
             const ErisTypeInfo* typeinfo,
-            uintptr_t           address,
-            uint32_t            index)
+            void               *address)
 {
     CHECK_NOT_ZERO (address);
     typeinfo = eris_typeinfo_get_non_synthetic (typeinfo);
     switch (eris_typeinfo_type (typeinfo)) {
         INTEGER_TYPES (INTEGER_FROM_LUA)
         FLOAT_TYPES (FLOAT_FROM_LUA)
+
         case ERIS_TYPE_BOOL:
-            SLOT (bool) = lua_toboolean (L, lindex);
+            *ADDR_OFF (bool, address, 0) = lua_toboolean (L, lindex);
             break;
+
         default:
             return luaL_error (L, "unsupported type '%s'",
                                eris_type_name (eris_typeinfo_type (typeinfo)));
@@ -1081,7 +1085,7 @@ eris_variable_newindex_special (lua_State      *L,
 
     switch (code) {
         case ERIS_SPECIAL_VALUE:
-            return cvalue_get (L, lindex, V->typeinfo, (uintptr_t) V->address, 0);
+            return cvalue_get (L, lindex, V->typeinfo, V->address);
         case ERIS_SPECIAL_NAME:
             return luaL_error (L, "__name is read-only");
         case ERIS_SPECIAL_TYPE:
@@ -1115,8 +1119,10 @@ eris_variable_newindex (lua_State *L)
     switch (eris_typeinfo_type (T)) {
         case ERIS_TYPE_ARRAY: {
             L_BOUNDS_CHECK (index, 2, eris_typeinfo_array_n_items (T));
-            return cvalue_get (L, 3, eris_typeinfo_base (T),
-                               (uintptr_t) V->address, index);
+            T = eris_typeinfo_get_non_synthetic (eris_typeinfo_base (T));
+            return cvalue_get (L, 3, T,
+                               ADDR_OFF (void, V->address,
+                                         index * eris_typeinfo_sizeof (T)));
         }
         case ERIS_TYPE_STRUCT: {
             const ErisTypeInfoMember *member;
@@ -1131,7 +1137,7 @@ eris_variable_newindex (lua_State *L)
                 }
             }
             return cvalue_get (L, 3, member->typeinfo,
-                               (uintptr_t) V->address + member->offset, 0);
+                               ADDR_OFF (void, V->address, member->offset));
         }
         default:
             return luaL_error (L, "not indexable");
