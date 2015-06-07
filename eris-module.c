@@ -912,18 +912,21 @@ eris_variable_len (lua_State *L)
         vname--;                                             \
     } while (0)
 
+#define ADDR_OFF(ctype, base, offset) \
+    ((ctype*) (((uintptr_t) base) + offset))
+
 #define FLOAT_TO_LUA(suffix, name, ctype) \
         case ERIS_TYPE_ ## suffix:        \
-            lua_pushnumber (L, ((ctype*) address)[index]); return 1;
+            lua_pushnumber (L, *ADDR_OFF (ctype, address, 0)); break;
+
 #define INTEGER_TO_LUA(suffix, name, ctype) \
         case ERIS_TYPE_ ## suffix:          \
-            lua_pushinteger (L, ((ctype*) address)[index]); return 1;
+            lua_pushinteger (L, *ADDR_OFF (ctype, address, 0)); break;
 
 static inline int
 cvalue_push (lua_State          *L,
              const ErisTypeInfo *typeinfo,
-             uintptr_t           address,
-             uint32_t            index)
+             void               *address)
 {
     CHECK_NOT_ZERO (address);
     typeinfo = eris_typeinfo_get_non_synthetic (typeinfo);
@@ -931,32 +934,23 @@ cvalue_push (lua_State          *L,
         INTEGER_TYPES (INTEGER_TO_LUA)
         FLOAT_TYPES (FLOAT_TO_LUA)
         case ERIS_TYPE_BOOL:
-            lua_pushboolean (L, ((bool*) address)[index]);
+            lua_pushboolean (L, *ADDR_OFF (bool, address, 0));
             return 1;
 
         case ERIS_TYPE_POINTER:
-            if (!((void**) address)[0]) {
+            if (!address) {
                 /* Map NULL pointers to "nil". */
                 lua_pushnil (L);
-                return 1;
+                break;
             }
             /* fall-through */
         case ERIS_TYPE_ARRAY:
-            eris_variable_push_userdata (L,
-                                         NULL,
-                                         eris_typeinfo_base (typeinfo),
-                                         ((void**) address)[index],
-                                         NULL);
-            return 1;
+            eris_variable_push_userdata (L, NULL, typeinfo, address, NULL);
+            break;
 
         case ERIS_TYPE_STRUCT:
-            address += eris_typeinfo_sizeof (typeinfo) * index;
-            eris_variable_push_userdata (L,
-                                         NULL,
-                                         typeinfo,
-                                         (void*) address,
-                                         NULL);
-            return 1;
+            eris_variable_push_userdata (L, NULL, typeinfo, address, NULL);
+            break;
 
         case ERIS_TYPE_VOID:
             return 0; /* Nothing to push. */
@@ -965,6 +959,7 @@ cvalue_push (lua_State          *L,
             return luaL_error (L, "unsupported type '%s'",
                                eris_type_name (eris_typeinfo_type (typeinfo)));
     }
+    return 1;
 }
 
 #undef INTEGER_TO_LUA
@@ -987,7 +982,7 @@ eris_variable_index_special (lua_State      *L,
             eris_typeinfo_push_userdata (L, V->typeinfo);
             break;
         case ERIS_SPECIAL_VALUE:
-            return cvalue_push (L, V->typeinfo, (uintptr_t) V->address, 0);
+            return cvalue_push (L, V->typeinfo, V->address);
         case ERIS_SPECIAL_LIBRARY:
             eris_library_push_userdata (L, V->library);
             break;
@@ -1003,33 +998,34 @@ eris_variable_index (lua_State *L)
     const ErisTypeInfo *T = eris_typeinfo_get_non_synthetic (V->typeinfo);
     if (!T) return luaL_error (L, "cannot get actual type");
 
+    const char *named_field = NULL;
+    size_t named_field_length = 0;
     if (lua_type (L, 2) == LUA_TSTRING) {
-        size_t length;
-        const char *name = lua_tolstring (L, 2, &length);
-        const ErisSpecial *s = eris_special_lookup (name, length);
+        named_field = lua_tolstring (L, 2, &named_field_length);
+        const ErisSpecial *s = eris_special_lookup (named_field,
+                                                    named_field_length);
         if (s) return eris_variable_index_special (L, V, s->code);
     }
 
     switch (eris_typeinfo_type (T)) {
         case ERIS_TYPE_ARRAY: {
             L_BOUNDS_CHECK (index, 2, eris_typeinfo_array_n_items (T));
-            return cvalue_push (L, eris_typeinfo_base (T),
-                                (uintptr_t) V->address, index);
+            T = eris_typeinfo_get_non_synthetic (eris_typeinfo_base (T));
+            return cvalue_push (L, T, ADDR_OFF (void,
+                                                V->address,
+                                                index * eris_typeinfo_sizeof (T)));
         }
         case ERIS_TYPE_STRUCT: {
-            const ErisTypeInfoMember *member;
-            if (lua_isinteger (L, 2)) {
+            const ErisTypeInfoMember *member = NULL;
+            if (!named_field) {
                 L_BOUNDS_CHECK (index, 2, eris_typeinfo_compound_n_members (T));
                 member = eris_typeinfo_compound_const_member (T, index);
-            } else {
-                const char *name = luaL_checkstring (L, 2);
-                member = eris_typeinfo_compound_const_named_member (T, name);
-                if (!member) {
-                    return luaL_error (L, "%s: no such struct member", name);
-                }
+            } else if (!(member = eris_typeinfo_compound_const_named_member (T, named_field))) {
+                    return luaL_error (L, "%s: no such struct member", named_field_length);
             }
+            CHECK_NOT_NULL (member);
             return cvalue_push (L, member->typeinfo,
-                                (uintptr_t) V->address + member->offset, 0);
+                                ADDR_OFF (void, V->address, member->offset));
         }
         default:
             return luaL_error (L, "not indexable");

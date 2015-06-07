@@ -117,7 +117,7 @@ eris_function_call (lua_State *L)
     TRACE (">" BLUE "done\n" NORMAL);
 
     if (ef->return_typeinfo) {
-        return cvalue_push (L, ef->return_typeinfo, (uintptr_t) scratch, 0);
+        return cvalue_push (L, ef->return_typeinfo, scratch);
     } else {
         return 0;
     }
