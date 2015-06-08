@@ -1192,6 +1192,14 @@ cvalue_get (lua_State          *L,
             }
             break;
 
+        case ERIS_TYPE_STRUCT:
+            eris_variable_push_userdata (L,
+                                         NULL,
+                                         typeinfo,
+                                         address,
+                                         NULL);
+            break;
+
         default:
             l_typeinfo_push_stringrep (L, typeinfo, true);
             return luaL_error (L, "unsupported type: %s", lua_tostring (L, -1));
