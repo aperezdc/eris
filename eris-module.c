@@ -117,15 +117,115 @@ to_eris_typeinfo (lua_State *L, int index)
 }
 
 
+static void
+l_typeinfo_tobuffer (luaL_Buffer        *b,
+                     const ErisTypeInfo *typeinfo,
+                     bool                verbose)
+{
+    CHECK_NOT_NULL (b);
+    CHECK_NOT_NULL (typeinfo);
+
+    bool has_name = eris_typeinfo_name (typeinfo) != NULL;
+
+    switch (eris_typeinfo_type (typeinfo)) {
+        case ERIS_TYPE_CONST:
+            luaL_addstring (b, "const ");
+            l_typeinfo_tobuffer (b, eris_typeinfo_base (typeinfo), false);
+            break;
+
+        case ERIS_TYPE_TYPEDEF:
+            if (verbose) {
+                luaL_addstring (b, "typedef ");
+                l_typeinfo_tobuffer (b, eris_typeinfo_base (typeinfo), false);
+                luaL_addchar (b, ' ');
+            }
+            luaL_addstring (b, eris_typeinfo_name (typeinfo));
+            break;
+
+        case ERIS_TYPE_POINTER:
+            l_typeinfo_tobuffer (b, eris_typeinfo_base (typeinfo), false);
+            luaL_addchar (b, '*');
+            break;
+
+        case ERIS_TYPE_ARRAY:
+            l_typeinfo_tobuffer (b, eris_typeinfo_base (typeinfo), false);
+            luaL_addchar (b, '[');
+            lua_pushinteger (b->L, eris_typeinfo_array_n_items (typeinfo));
+            luaL_addvalue (b);
+            luaL_addchar (b, ']');
+            break;
+
+        case ERIS_TYPE_ENUM:
+            luaL_addstring (b, "enum");
+            if (has_name) {
+                luaL_addchar (b, ' ');
+                luaL_addstring (b, eris_typeinfo_name (typeinfo));
+            }
+            if (verbose || !has_name) {
+                luaL_addstring (b, " {");
+                const uint32_t n = eris_typeinfo_compound_n_members (typeinfo);
+                for (uint32_t i = 0; i < n; i++) {
+                    if (i > 0) luaL_addstring (b, ",");
+                    const ErisTypeInfoMember *member =
+                            eris_typeinfo_compound_const_member (typeinfo, i);
+                    luaL_addchar (b, ' ');
+                    luaL_addstring (b, member->name);
+                }
+                luaL_addstring (b, " }");
+            }
+            break;
+
+        case ERIS_TYPE_STRUCT:
+            luaL_addstring (b, "struct");
+            if (has_name) {
+                luaL_addchar (b, ' ');
+                luaL_addstring (b, eris_typeinfo_name (typeinfo));
+            }
+            if (verbose || !has_name) {
+                luaL_addstring (b, " {");
+                const uint32_t n = eris_typeinfo_compound_n_members (typeinfo);
+                for (uint32_t i = 0; i < n; i++) {
+                    if (i > 0) luaL_addstring (b, ";");
+                    const ErisTypeInfoMember *member =
+                            eris_typeinfo_compound_const_member (typeinfo, i);
+                    luaL_addchar (b, ' ');
+                    l_typeinfo_tobuffer (b, member->typeinfo, false);
+                    if (member->name) {
+                        luaL_addchar (b, ' ');
+                        luaL_addstring (b, member->name);
+                    }
+                }
+                luaL_addstring (b, " }");
+            }
+            break;
+
+        default:
+            luaL_addstring (b, eris_typeinfo_name (typeinfo));
+    }
+}
+
+
+static int
+l_typeinfo_push_stringrep (lua_State          *L,
+                           const ErisTypeInfo *typeinfo,
+                           bool                verbose)
+{
+    CHECK_NOT_NULL (typeinfo);
+    luaL_Buffer b;
+    luaL_buffinit (L, &b);
+    luaL_addstring (&b, "eris.type (");
+    l_typeinfo_tobuffer (&b, typeinfo, verbose);
+    luaL_addchar (&b, ')');
+    luaL_pushresult (&b);
+    return 1;
+}
+
+
 static int
 l_eris_typeinfo_tostring (lua_State *L)
 {
     const ErisTypeInfo *typeinfo = to_eris_typeinfo (L, 1);
-    lua_pushfstring (L,
-                     "eris.type (%p:%s)",
-                     typeinfo,
-                     eris_typeinfo_name (typeinfo));
-    return 1;
+    return l_typeinfo_push_stringrep (L, typeinfo, false);
 }
 
 
@@ -956,8 +1056,8 @@ cvalue_push (lua_State          *L,
             return 0; /* Nothing to push. */
 
         default:
-            return luaL_error (L, "unsupported type '%s'",
-                               eris_type_name (eris_typeinfo_type (typeinfo)));
+            l_typeinfo_push_stringrep (L, typeinfo, true);
+            return luaL_error (L, "unsupported type: %s", lua_tostring (L, -1));
     }
     return 1;
 }
@@ -1062,8 +1162,8 @@ cvalue_get (lua_State          *L,
             break;
 
         default:
-            return luaL_error (L, "unsupported type '%s'",
-                               eris_type_name (eris_typeinfo_type (typeinfo)));
+            l_typeinfo_push_stringrep (L, typeinfo, true);
+            return luaL_error (L, "unsupported type: %s", lua_tostring (L, -1));
     }
 
     return 1;
