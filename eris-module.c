@@ -1052,10 +1052,8 @@ cvalue_push (lua_State          *L,
             }
             break;
 
+        case ERIS_TYPE_UNION:
         case ERIS_TYPE_ARRAY:
-            eris_variable_push_userdata (L, NULL, typeinfo, address, NULL);
-            break;
-
         case ERIS_TYPE_STRUCT:
             eris_variable_push_userdata (L, NULL, typeinfo, address, NULL);
             break;
