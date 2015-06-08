@@ -1038,12 +1038,16 @@ cvalue_push (lua_State          *L,
             return 1;
 
         case ERIS_TYPE_POINTER:
-            if (!address) {
+            if (*ADDR_OFF (void*, address, 0)) {
+                eris_variable_push_userdata (L, NULL, typeinfo,
+                                             *ADDR_OFF (void*, address, 0),
+                                             NULL);
+            } else {
                 /* Map NULL pointers to "nil". */
                 lua_pushnil (L);
-                break;
             }
-            /* fall-through */
+            break;
+
         case ERIS_TYPE_ARRAY:
             eris_variable_push_userdata (L, NULL, typeinfo, address, NULL);
             break;
