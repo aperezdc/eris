@@ -1121,17 +1121,23 @@ eris_variable_index (lua_State *L)
                                 ADDR_OFF (void, V->address,
                                           index * eris_typeinfo_sizeof (T)));
         }
+        case ERIS_TYPE_UNION:
         case ERIS_TYPE_STRUCT: {
             const ErisTypeInfoMember *member = NULL;
             if (!named_field) {
                 L_BOUNDS_CHECK (index, 2, eris_typeinfo_compound_n_members (T));
                 member = eris_typeinfo_compound_const_member (T, index);
             } else if (!(member = eris_typeinfo_compound_const_named_member (T, named_field))) {
-                    return luaL_error (L, "%s: no such struct member", named_field);
+                l_typeinfo_push_stringrep (L, T, true);
+                return luaL_error (L, "%s: no such member in type '%s'",
+                                   named_field, lua_tostring (L, -1));
             }
+
             CHECK_NOT_NULL (member);
             return cvalue_push (L, member->typeinfo,
-                                ADDR_OFF (void, V->address, member->offset));
+                                eris_typeinfo_is_struct (T)
+                                    ? ADDR_OFF (void, V->address, member->offset)
+                                    : V->address);
         }
         default:
             return luaL_error (L, "not indexable");
