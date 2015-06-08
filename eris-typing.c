@@ -479,6 +479,9 @@ eris_typeinfo_equal (const ErisTypeInfo *a,
     if (a == b)
         return true;
 
+    a = eris_typeinfo_get_non_synthetic (a);
+    b = eris_typeinfo_get_non_synthetic (b);
+
     if (a->type != b->type)
         return false;
 
@@ -487,40 +490,20 @@ eris_typeinfo_equal (const ErisTypeInfo *a,
             return eris_typeinfo_equal (a->ti_pointer.typeinfo,
                                         b->ti_pointer.typeinfo);
 
-        case ERIS_TYPE_TYPEDEF:
-            return string_equal (a->ti_typedef.name, b->ti_typedef.name)
-                && eris_typeinfo_equal (a->ti_typedef.typeinfo,
-                                        b->ti_typedef.typeinfo);
-
-        case ERIS_TYPE_CONST:
-            return eris_typeinfo_equal (a->ti_typedef.typeinfo,
-                                        b->ti_typedef.typeinfo);
-
         case ERIS_TYPE_ARRAY:
             return a->ti_array.n_items == b->ti_array.n_items
                 && eris_typeinfo_equal (a->ti_array.typeinfo,
                                         b->ti_array.typeinfo);
 
+        case ERIS_TYPE_ENUM:
         case ERIS_TYPE_UNION:
         case ERIS_TYPE_STRUCT:
-            if (a->ti_compound.size != b->ti_compound.size ||
-                a->ti_compound.n_members != b->ti_compound.n_members ||
-                !string_equal (a->ti_compound.name, b->ti_compound.name)) {
-                    return false;
-            }
-            /* Check struct members. */
-            for (uint32_t i = 0; i < a->ti_compound.n_members; i++) {
-                if (!string_equal (a->ti_compound.members[i].name,
-                                   b->ti_compound.members[i].name) ||
-                    !eris_typeinfo_equal (a->ti_compound.members[i].typeinfo,
-                                          b->ti_compound.members[i].typeinfo))
-                        return false;
-            }
-            return true;
+            return a->ti_compound.name
+                && b->ti_compound.name
+                && string_equal (a->ti_compound.name, b->ti_compound.name);
 
         default:
-            return a->ti_base.size == b->ti_base.size
-                && string_equal (a->ti_base.name, b->ti_base.name);
+            return true;
     }
 }
 
