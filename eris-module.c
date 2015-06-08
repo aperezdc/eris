@@ -1121,7 +1121,7 @@ eris_variable_index (lua_State *L)
                 L_BOUNDS_CHECK (index, 2, eris_typeinfo_compound_n_members (T));
                 member = eris_typeinfo_compound_const_member (T, index);
             } else if (!(member = eris_typeinfo_compound_const_named_member (T, named_field))) {
-                    return luaL_error (L, "%s: no such struct member", named_field_length);
+                    return luaL_error (L, "%s: no such struct member", named_field);
             }
             CHECK_NOT_NULL (member);
             return cvalue_push (L, member->typeinfo,
