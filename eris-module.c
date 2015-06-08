@@ -1165,6 +1165,24 @@ cvalue_get (lua_State          *L,
             *ADDR_OFF (bool, address, 0) = lua_toboolean (L, lindex);
             break;
 
+        case ERIS_TYPE_POINTER:
+            if (eris_typeinfo_is_cstring (typeinfo) &&
+                    lua_type (L, lindex) == LUA_TSTRING) {
+                *ADDR_OFF (const char*, address, 0) = lua_tostring (L, lindex);
+            } else {
+                ErisVariable *ev = to_eris_variable (L, lindex);
+                if (!eris_typeinfo_equal (typeinfo,
+                        eris_typeinfo_get_non_synthetic (ev->typeinfo))) {
+                    return luaL_error (L, "parameter %d: expected value of "
+                                       "type '%s', given '%s'",
+                                       eris_typeinfo_name (typeinfo),
+                                       eris_typeinfo_name (ev->typeinfo));
+                }
+                TRACE (">\t\tgot %p\n", ev->address);
+                *ADDR_OFF (void*, address, 0) = ev->address;
+            }
+            break;
+
         default:
             l_typeinfo_push_stringrep (L, typeinfo, true);
             return luaL_error (L, "unsupported type: %s", lua_tostring (L, -1));

@@ -355,6 +355,19 @@ eris_typeinfo_struct_is_opaque (const ErisTypeInfo *typeinfo)
 }
 
 
+bool
+eris_typeinfo_is_cstring (const ErisTypeInfo *typeinfo)
+{
+    CHECK_NOT_NULL (typeinfo);
+
+    typeinfo = eris_typeinfo_get_non_synthetic (typeinfo);
+    const ErisTypeInfo *base =
+            eris_typeinfo_get_non_synthetic (typeinfo->ti_pointer.typeinfo);
+    return typeinfo->type == ERIS_TYPE_POINTER &&
+        (base->type == ERIS_TYPE_S8 || base->type == ERIS_TYPE_U8);
+}
+
+
 uint64_t
 eris_typeinfo_array_n_items (const ErisTypeInfo *typeinfo)
 {

@@ -140,6 +140,7 @@ extern uint32_t    eris_typeinfo_sizeof (const ErisTypeInfo *typeinfo);
 extern uint64_t    eris_typeinfo_array_n_items (const ErisTypeInfo* typeinfo);
 extern bool        eris_typeinfo_struct_is_opaque (const ErisTypeInfo *typeinfo);
 extern uint32_t    eris_typeinfo_compound_n_members (const ErisTypeInfo *typeinfo);
+extern bool        eris_typeinfo_is_cstring (const ErisTypeInfo *typeinfo);
 
 extern bool eris_typeinfo_get_const (const ErisTypeInfo *typeinfo);
 extern const ErisTypeInfo* eris_typeinfo_get_compound (const ErisTypeInfo *typeinfo);
@@ -162,6 +163,7 @@ eris_typeinfo_compound_const_member (const ErisTypeInfo *typeinfo,
 
 #define DECLARE_TYPEINFO_IS_TYPE(suffix, name, ctype) \
     static inline bool eris_typeinfo_is_ ## name (const ErisTypeInfo *typeinfo) { \
+        typeinfo = eris_typeinfo_get_non_synthetic (typeinfo);                     \
         return eris_typeinfo_type (typeinfo) == ERIS_TYPE_ ## suffix; }
 
 ALL_TYPES (DECLARE_TYPEINFO_IS_TYPE)
@@ -171,6 +173,7 @@ ALL_TYPES (DECLARE_TYPEINFO_IS_TYPE)
 
 #define DECLARE_ERIS_TYPEINFO_IS(check) \
     static inline bool eris_typeinfo_is_ ## check (const ErisTypeInfo *typeinfo) { \
+        typeinfo = eris_typeinfo_get_non_synthetic (typeinfo);                     \
         return eris_type_is_ ## check (eris_typeinfo_type (typeinfo)); }
 
 DECLARE_ERIS_TYPEINFO_IS (base)
