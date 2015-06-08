@@ -288,7 +288,7 @@ l_eris_typeinfo_index (lua_State *L)
         } else if (!strcmp ("sizeof", field)) {
             lua_pushinteger (L, eris_typeinfo_sizeof (typeinfo));
         } else if (!strcmp ("readonly", field)) {
-            lua_pushboolean (L, eris_typeinfo_is_const (typeinfo));
+            lua_pushboolean (L, eris_typeinfo_is_readonly (typeinfo));
         } else if (string_equal ("kind", field)) {
             lua_pushstring (L, l_eris_typeinfo_type_string (typeinfo));
         } else if (string_equal ("type", field)) {
@@ -1224,7 +1224,7 @@ eris_variable_newindex (lua_State *L)
 {
     ErisVariable *V = to_eris_variable (L, 1);
 
-    if (eris_typeinfo_get_const (V->typeinfo)) {
+    if (eris_typeinfo_is_readonly (V->typeinfo)) {
         return luaL_error (L, "read-only variable (%p:%s)",
                            V->library, V->name);
     }

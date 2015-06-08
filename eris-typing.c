@@ -427,7 +427,7 @@ eris_typeinfo_get_compound (const ErisTypeInfo *typeinfo)
 
 
 bool
-eris_typeinfo_get_const (const ErisTypeInfo *typeinfo)
+eris_typeinfo_is_readonly (const ErisTypeInfo *typeinfo)
 {
     CHECK_NOT_NULL (typeinfo);
 
@@ -435,7 +435,7 @@ eris_typeinfo_get_const (const ErisTypeInfo *typeinfo)
         return true;
 
     typeinfo = eris_typeinfo_base (typeinfo);
-    return typeinfo ? eris_typeinfo_get_const (typeinfo) : false;
+    return typeinfo ? eris_typeinfo_is_readonly (typeinfo) : false;
 }
 
 
