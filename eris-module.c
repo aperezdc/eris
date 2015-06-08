@@ -200,7 +200,11 @@ l_typeinfo_tobuffer (luaL_Buffer        *b,
             break;
 
         default:
-            luaL_addstring (b, eris_typeinfo_name (typeinfo));
+            if (has_name) {
+                luaL_addstring (b, eris_typeinfo_name (typeinfo));
+            } else {
+                luaL_addstring (b, "(unnamed)");
+            }
     }
 }
 
