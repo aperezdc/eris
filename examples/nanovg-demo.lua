@@ -61,9 +61,9 @@ local function graph(vg, x, y, w, h, t)
 	local bg = nvg.LinearGradient(vg, x, y, x, y + h,
 		nvg.RGBA(0, 160, 192, 0), nvg.RGBA(0, 160, 192, 0))
 	nvg.BeginPath(vg)
-	nvg.MoveTo(vg, sx[0], sy[0])
+	nvg.MoveTo(vg, sx[1], sy[1])
 	for i = 2, #sx do
-		nvg.BezierTo(vg, dx[i-1] + dx * 0.5, sy[i-1] - dx * 0.5,
+		nvg.BezierTo(vg, sx[i-1] + dx * 0.5, sy[i-1], sx[i] - dx * 0.5,
 			sy[i], sx[i], sy[i])
 	end
 	nvg.LineTo(vg, x + w, y + h)
