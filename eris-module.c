@@ -1167,6 +1167,29 @@ eris_variable_index (lua_State *L)
 }
 
 
+static void
+l_typecheck (lua_State          *L,
+             int                 idx,
+             const ErisTypeInfo *dst,
+             const ErisTypeInfo *src)
+{
+    CHECK_NOT_NULL (dst);
+    CHECK_NOT_NULL (src);
+
+    if (!eris_typeinfo_equal (dst, src)) {
+        l_typeinfo_push_stringrep (L, dst, false);
+        l_typeinfo_push_stringrep (L, src, false);
+        if (idx <= 0) {
+            luaL_error (L, "expected value of type '%s', given '%s'",
+                        lua_tostring (L, -2), lua_tostring (L, -1));
+        } else {
+            luaL_error (L, "#%d: expected value of type '%s', given '%s'",
+                        idx, lua_tostring (L, -2), lua_tostring (L, -1));
+        }
+    }
+}
+
+
 #define FLOAT_FROM_LUA(suffix, name, ctype)           \
         case ERIS_TYPE_ ## suffix:                    \
             *ADDR_OFF (ctype, address, 0) =           \
@@ -1201,14 +1224,7 @@ cvalue_get (lua_State          *L,
                 *ADDR_OFF (const char*, address, 0) = lua_tostring (L, lindex);
             } else {
                 ErisVariable *ev = to_eris_variable (L, lindex);
-                if (!eris_typeinfo_equal (typeinfo, ev->typeinfo)) {
-                    l_typeinfo_push_stringrep (L, typeinfo, true);
-                    const char *t1 = lua_tostring (L, -1);
-                    l_typeinfo_push_stringrep (L, ev->typeinfo, true);
-                    const char *t2 = lua_tostring (L, -1);
-                    return luaL_error (L, "parameter %d: expected value of "
-                                       "type '%s', given '%s'", lindex - 1, t1, t2);
-                }
+                l_typecheck (L, lindex - 1, typeinfo, ev->typeinfo);
                 TRACE (">\t\tgot %p\n", ev->address);
                 *ADDR_OFF (void*, address, 0) = ev->address;
             }
