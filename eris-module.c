@@ -1243,14 +1243,16 @@ cvalue_get (lua_State          *L,
             }
             break;
 
-        case ERIS_TYPE_STRUCT:
-            eris_variable_push_userdata (L,
-                                         NULL,
-                                         typeinfo,
-                                         address,
-                                         NULL);
+        case ERIS_TYPE_STRUCT: {
+            ErisVariable *ev = to_eris_variable (L, lindex);
+            l_typecheck (L, lindex - 1, typeinfo, ev->typeinfo);
+            CHECK_SIZE_EQ (eris_typeinfo_sizeof (typeinfo),
+                           eris_typeinfo_sizeof (ev->typeinfo));
+            memcpy (ADDR_OFF (void, address, 0),
+                    ADDR_OFF (void, ev->address, 0),
+                    eris_typeinfo_sizeof (typeinfo));
             break;
-
+        }
         default:
             l_typeinfo_push_stringrep (L, typeinfo, true);
             return luaL_error (L, "unsupported type: %s", lua_tostring (L, -1));
