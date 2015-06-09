@@ -27,6 +27,17 @@ eris_fcall_ffi_map_type (const ErisTypeInfo *typeinfo,
         case ERIS_TYPE_U64:     return &ffi_type_uint64;
         case ERIS_TYPE_FLOAT:   return &ffi_type_float;
         case ERIS_TYPE_DOUBLE:  return &ffi_type_double;
+
+        case ERIS_TYPE_ENUM:
+            /* Enums are passed as integers of the corresponding width. */
+            switch (eris_typeinfo_sizeof (typeinfo)) {
+                case 1: return &ffi_type_sint8;
+                case 2: return &ffi_type_sint16;
+                case 4: return &ffi_type_sint32;
+                case 8: return &ffi_type_sint64;
+                default: return NULL;
+            }
+
         case ERIS_TYPE_POINTER: return &ffi_type_pointer;
 
         case ERIS_TYPE_CONST:
