@@ -6,36 +6,9 @@
 -- Distributed under terms of the MIT license.
 --
 
-local eris = require "eris"
-
---
--- Makes functions available (and memoized) in the "nvg" table,
--- plus types in the "nvg.types" table. Note that prefixes are
--- added automatically when looking up items from the library.
---
-local _nanovg = eris.load "nanovg"
-local nvg = setmetatable({
-	types = setmetatable({}, {
-		__index = function (self, key)
-			local t = rawget(self, key)
-			if t == nil then
-				t = eris.type(_nanovg, "NVG" .. key)
-				rawset(self, key, t or false)
-			end
-			return t
-		end,
-	}),
-}, {
-	__index = function (self, key)
-		local f = rawget(self, key)
-		if f == nil then
-			f = _nanovg["nvg" .. key]
-			rawset(self, key, f or false)
-		end
-		return f
-	end,
-});
-
+local nvg = require "modularize" {
+	"nanovg", prefix = "nvg", type_prefix = "NVG"
+}
 
 local W = 800
 local H = 600

@@ -1,3 +1,11 @@
+# This "modularize" module is used by some of the other examples.
+# Provide a link to it in the build output directory.
+rule hardlink
+  command = ln -T ${in} ${out}
+  description = ln ${in} -> ${out}
+
+build ${obj}/modularize.lua : hardlink examples/modularize.lua
+
 # NanoVG module.
 build ${obj}/nanovg.o       : cc examples/nanovg/src/nanovg.c
 build ${obj}/nanovg-utils.o : cc examples/nanovg-utils.c
@@ -7,3 +15,5 @@ build ${obj}/nanovg.so      : ld ${obj}/nanovg.o ${obj}/nanovg-utils.o
 
 build examples : phony $
       ${obj}/nanovg.so
+      ${obj}/nanovg.so $
+      ${obj}/modularize.lua
