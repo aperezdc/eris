@@ -1,3 +1,6 @@
 [submodule "examples/nanovg"]
 	path = examples/nanovg
 	url = git://github.com/memononen/nanovg
+[submodule "examples/upng"]
+	path = examples/upng
+	url = git://github.com/elanthis/upng

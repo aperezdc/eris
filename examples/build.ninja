@@ -13,7 +13,12 @@ build ${obj}/nanovg.so      : ld ${obj}/nanovg.o ${obj}/nanovg-utils.o
   ldflags = ${ldflags} -shared
   libs = -lGLESv2 -lglfw
 
+# uPNG module.
+build ${obj}/upng.o  : cc examples/upng/upng.c
+build ${obj}/upng.so : ld ${obj}/upng.o
+  ldflags = ${ldflags} -shared
+
 build examples : phony $
-      ${obj}/nanovg.so
       ${obj}/nanovg.so $
+      ${obj}/upng.so   $
       ${obj}/modularize.lua
