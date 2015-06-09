@@ -1037,6 +1037,29 @@ cvalue_push (lua_State          *L,
     switch (eris_typeinfo_type (typeinfo)) {
         INTEGER_TYPES (INTEGER_TO_LUA)
         FLOAT_TYPES (FLOAT_TO_LUA)
+
+        case ERIS_TYPE_ENUM:
+            switch (eris_typeinfo_sizeof (typeinfo)) {
+                case 1:
+                    lua_pushinteger (L, *ADDR_OFF (int8_t, address, 0));
+                    break;
+                case 2:
+                    lua_pushinteger (L, *ADDR_OFF (int16_t, address, 0));
+                    break;
+                case 4:
+                    lua_pushinteger (L, *ADDR_OFF (int32_t, address, 0));
+                    break;
+                case 8:
+                    lua_pushinteger (L, *ADDR_OFF (int64_t, address, 0));
+                    break;
+                default:
+                    l_typeinfo_push_stringrep (L, typeinfo, false);
+                    return luaL_error (L, "size %d for type '%s' unsupported",
+                                       eris_typeinfo_sizeof (typeinfo),
+                                       lua_tostring (L, -1));
+            }
+            return 1;
+
         case ERIS_TYPE_BOOL:
             lua_pushboolean (L, *ADDR_OFF (bool, address, 0));
             return 1;
