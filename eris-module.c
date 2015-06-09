@@ -1021,11 +1021,11 @@ eris_variable_len (lua_State *L)
 
 #define FLOAT_TO_LUA(suffix, name, ctype) \
         case ERIS_TYPE_ ## suffix:        \
-            lua_pushnumber (L, *ADDR_OFF (ctype, address, 0)); break;
+            lua_pushnumber (L, *ADDR_OFF (ctype, address, 0)); return 1;
 
 #define INTEGER_TO_LUA(suffix, name, ctype) \
         case ERIS_TYPE_ ## suffix:          \
-            lua_pushinteger (L, *ADDR_OFF (ctype, address, 0)); break;
+            lua_pushinteger (L, *ADDR_OFF (ctype, address, 0)); return 1;
 
 static inline int
 cvalue_push (lua_State          *L,
@@ -1073,13 +1073,13 @@ cvalue_push (lua_State          *L,
                 /* Map NULL pointers to "nil". */
                 lua_pushnil (L);
             }
-            break;
+            return 1;
 
         case ERIS_TYPE_UNION:
         case ERIS_TYPE_ARRAY:
         case ERIS_TYPE_STRUCT:
             eris_variable_push_userdata (L, NULL, typeinfo, address, NULL);
-            break;
+            return 1;
 
         case ERIS_TYPE_VOID:
             return 0; /* Nothing to push. */
@@ -1088,7 +1088,6 @@ cvalue_push (lua_State          *L,
             l_typeinfo_push_stringrep (L, typeinfo, true);
             return luaL_error (L, "unsupported type: %s", lua_tostring (L, -1));
     }
-    return 1;
 }
 
 #undef INTEGER_TO_LUA
