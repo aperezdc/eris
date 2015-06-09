@@ -43,6 +43,10 @@ eris_fcall_ffi_map_type (const ErisTypeInfo *typeinfo,
         case ERIS_TYPE_CONST:
         case ERIS_TYPE_TYPEDEF:
             CHECK_UNREACHABLE ();
+
+        default:
+            TRACE (RED "Unsupported type: " NORMAL "%s\n",
+                   eris_typeinfo_name (typeinfo));
             return NULL;
     }
 }
@@ -116,6 +120,8 @@ eris_function_call (lua_State *L)
      */
     for (uint32_t i = 0; i < ef->n_param; i++) {
         params[i] = (void*) addr;
+        TRACE (FBLUE "%s()" NORMAL ": Parameter %" PRIu32 ", type %s\n",
+               ef->name, i, eris_typeinfo_name (ef->param_types[i]));
         cvalue_get (L, i + 2, ef->param_types[i], (void*) addr);
         addr += eris_typeinfo_sizeof (ef->param_types[i]);
     }
