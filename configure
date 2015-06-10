@@ -389,8 +389,8 @@ fi
 if ${enable_asan}
 then
 	cf_compiler_is_clang "${CC}" || cf_die 'ASAN only works when building with Clang'
-	LDFLAGS="${CFLAGS} -fsanitize=address"
-	CFLAGS="${CFLAGS} -fsanitize=address"
+	LDFLAGS="${CFLAGS} -fsanitize=address -fno-common -fno-omit-frame-pointer"
+	CFLAGS="${CFLAGS} -fsanitize=address -fno-common -fno-omit-frame-pointer"
 	build_type="${build_type} (+asan)"
 fi
 
