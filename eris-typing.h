@@ -161,6 +161,22 @@ extern const ErisTypeInfoMember*
 eris_typeinfo_compound_const_member (const ErisTypeInfo *typeinfo,
                                      uint32_t            index);
 
+
+#define ERIS_TYPEINFO_COMPOUND_FOREACH_CONST_MEMBER(itername, typeinfo) \
+    itername = eris_typeinfo_compound_const_member (typeinfo, 0);       \
+    for (uint32_t itername  ## _i = 0, itername ## _n_members =         \
+            eris_typeinfo_compound_n_members (typeinfo);                \
+         itername ## _i < itername ## _n_members;                       \
+         itername = eris_typeinfo_compound_const_member (typeinfo, itername ## _i++))
+
+#define ERIS_TYPEINFO_COMPOUND_FOREACH_MEMBER(itername, typeinfo) \
+    itername = eris_typeinfo_compound_const_member (typeinfo, 0); \
+    for (uint32_t itername  ## _i = 0, itername ## _n_members =   \
+            eris_typeinfo_compound_n_members (typeinfo);          \
+         itername ## _i < itername ## _n_members;                 \
+         itername = eris_typeinfo_compound_const_member (typeinfo, itername ## _i++))
+
+
 #define DECLARE_TYPEINFO_IS_TYPE(suffix, name, ctype) \
     static inline bool eris_typeinfo_is_ ## name (const ErisTypeInfo *typeinfo) { \
         typeinfo = eris_typeinfo_get_non_synthetic (typeinfo);                     \
