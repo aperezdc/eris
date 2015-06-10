@@ -1,0 +1,23 @@
+#! /bin/sh
+#
+# Usage: $0 lua-binary script.lua objdir outfile
+#
+
+mkdir -p "$3" "$(dirname "$4")"
+curdir=$(pwd)
+
+cd "$(dirname "$2")"
+script="$(pwd)/$(basename "$2")"
+cd "${curdir}"
+
+cd "$3"
+objdir=$(pwd)
+cd "${curdir}"
+
+cat > "$4" <<EOF
+#! /bin/sh
+set -e
+cd '${objdir}'
+exec '$1' '${script}' "\$@"
+EOF
+chmod +x "$4"

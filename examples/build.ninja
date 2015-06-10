@@ -18,7 +18,24 @@ build ${obj}/upng.o  : cc examples/upng/upng.c
 build ${obj}/upng.so : ld ${obj}/upng.o
   ldflags = ${ldflags} -shared
 
+# Makes a wrapper shell script which changes to the output directory
+# and runs Lua in there passing the wrapped script. This makes the
+# examples easier to run.
+rule wrap
+  command = ./examples/wrap ${lua_exe} ${in} ${obj} ${out}
+  description = examples/wrap ${in}
+
+build ${obj}/examples/type-pp     : wrap examples/type-pp.lua
+build ${obj}/examples/nanovg-demo : wrap examples/nanovg-demo.lua
+build ${obj}/examples/upng-info   : wrap examples/upng-info.lua
+
+build examples-wrapper : phony  $
+      ${obj}/examples/type-pp   $
+      ${obj}/examples/upng-info $
+      ${obj}/examples/nanovg-demo
+
 build examples : phony $
+      examples-wrapper $
       ${obj}/nanovg.so $
       ${obj}/upng.so   $
       ${obj}/modularize.lua

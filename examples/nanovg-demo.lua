@@ -13,6 +13,9 @@ local nvg = require "modularize" {
 local W = 800
 local H = 600
 
+local grColor1 = nvg.RGBA(0, 160, 192, 255)
+local grColor2 = nvg.RGBA(0, 160, 192, 32)
+
 local function graph(vg, x, y, w, h, t)
 	local samples = {
 		1 + math.sin(t * 1.23450 + math.cos(t * 0.33457) * 0.44) * 0.5,
@@ -31,10 +34,9 @@ local function graph(vg, x, y, w, h, t)
 		sy[i] = y + h * sample * 0.8
 	end
 
-	local bg = nvg.LinearGradient(vg, x, y, x, y + h,
-		nvg.RGBA(0, 160, 192, 0), nvg.RGBA(0, 160, 192, 0))
+	local bg = nvg.LinearGradient(vg, x, y, x, y + h, grColor1, grColor2)
 	nvg.BeginPath(vg)
-	nvg.MoveTo(vg, sx[1], sy[1])
+	nvg.MoveTo(vg, 0, (y + h/2) * 0.75)
 	for i = 2, #sx do
 		nvg.BezierTo(vg, sx[i-1] + dx * 0.5, sy[i-1], sx[i] - dx * 0.5,
 			sy[i], sx[i], sy[i])
@@ -53,6 +55,8 @@ local vg = nvg.Create(true)
 while not nvg.Done(window) do
 	nvg.FrameStart(window, vg)
 	graph(vg, 0, H/2, W, H/2, nvg.Time())
+	graph(vg, 0, 0, W, H, nvg.Time()+5)
+	graph(vg, 0, -H, W, H*4, nvg.Time()+1.618)
 	nvg.FrameEnd(window, vg)
 end
 nvg.Exit()
