@@ -1,6 +1,6 @@
 #! /usr/bin/env lua
 --
--- assertions.lua
+-- harness-assert.lua
 -- Copyright (C) 2015 Adrian Perez <aperez@igalia.com>
 --
 -- Distributed under terms of the MIT license.

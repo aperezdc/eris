@@ -56,9 +56,9 @@ build ${obj}/eris.so : ld     $
 
 # Lua module: testutil.so
 #
-build ${obj}/testutil-module.o : cc testutil-module.c | eris-lua.h
-build ${obj}/testutil.so : ld ${obj}/testutil-module.o
-  ldflags = ${ldflags} -shared -Wl,--no-allow-shlib-undefined
+build ${obj}/testutil.o  : cc tools/harness-testutil.c | eris-lua.h
+build ${obj}/testutil.so : ld ${obj}/testutil.o
+  ldflags = ${ldflags} -shared
 
 # Library used by the test suite.
 #

@@ -9,7 +9,7 @@
 # Obtain the working directory and the directory where this scripts resides,
 # which then can be used to find the test harness and the needed binaries.
 curdir=$(pwd)
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 erisdir=$(pwd)
 
 if ! test -r build.conf
@@ -39,5 +39,5 @@ do
 done
 
 export ERIS_LUA_EXE="${luaexe}"
-export LUA_INIT="@${erisdir}/assertions.lua"
-exec "${luaexe}" "${erisdir}/harness.lua" "${erisdir}" "${curdir}" "$@"
+export LUA_INIT="@${erisdir}/tools/harness-assert.lua"
+exec "${luaexe}" "${erisdir}/tools/harness.lua" "${erisdir}" "${curdir}" "$@"

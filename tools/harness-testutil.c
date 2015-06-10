@@ -1,11 +1,11 @@
 /*
- * testutil-module.c
+ * harness-testutil.c
  * Copyright (C) 2015 Adrian Perez <aperez@igalia.com>
  *
  * Distributed under terms of the MIT license.
  */
 
-#include "eris-lua.h"
+#include "../eris-lua.h"
 
 #include <sys/types.h>
 #include <sys/stat.h>
