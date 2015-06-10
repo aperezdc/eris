@@ -22,8 +22,8 @@ build ${obj}/upng.so : ld ${obj}/upng.o
 # and runs Lua in there passing the wrapped script. This makes the
 # examples easier to run.
 rule wrap
-  command = ./examples/wrap ${lua_exe} ${in} ${obj} ${out}
-  description = examples/wrap ${in}
+  command = ./tools/make-example-wrapper-script ${lua_exe} ${in} ${obj} ${out}
+  description = wrap-example ${in}
 
 build ${obj}/examples/type-pp     : wrap examples/type-pp.lua
 build ${obj}/examples/nanovg-demo : wrap examples/nanovg-demo.lua
