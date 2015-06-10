@@ -367,7 +367,6 @@ for var in "$@" ; do
 done
 
 
-build_type='release'
 if ${debug_build}
 then
 	build_type='debug'
@@ -375,20 +374,15 @@ then
 	LDFLAGS="${LDFLAGS} -g"
 	CPPFLAGS="${CPPFLAGS} -DLUA_USE_APICHECK=1"
 else
-	if ${enable_asan}
+	build_type='release'
+	CFLAGS="${CFLAGS} -O2 -g"
+	#
+	# All reasonably recent versions of Clang support LTO.
+	#
+	if cf_compiler_is_clang "${CC}"
 	then
-		CFLAGS="${CFLAGS} -O1 -g"
-		build_type="${build_type} (+asan)"
-	else
-		CFLAGS="${CFLAGS} -O2 -g"
-		#
-		# All reasonably recent versions of Clang support LTO.
-		#
-		if cf_compiler_is_clang "${CC}"
-		then
-			CFLAGS="${CFLAGS} -flto"
-			LDFLAGS="${LDFLAGS} -flto"
-		fi
+		CFLAGS="${CFLAGS} -flto"
+		LDFLAGS="${LDFLAGS} -flto"
 	fi
 fi
 
