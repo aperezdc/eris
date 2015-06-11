@@ -68,7 +68,7 @@ ERIS_MODULE_SRCS := eris-module.c eris-trace.c eris-util.c eris-typing.c \
 ERIS_MODULE_OBJS := $(patsubst %.c,${OUT}/%.o,${ERIS_MODULE_SRCS})
 
 # Testutil module source.
-TESTUTIL_MODULE_SRCS := testutil-module.c
+TESTUTIL_MODULE_SRCS := tools/harness-testutil.c
 TESTUTIL_MODULE_OBJS := $(patsubst %.c,${OUT}/%.o,${TESTUTIL_MODULE_SRCS})
 
 %.inc: %.gperf
@@ -106,7 +106,7 @@ clean:
 	$Q ${RM} ${OUT}/libtest2.so ${OUT}/libtest2.o
 
 eris-module.c: eris-lua.h eris-libdwarf.h specials.inc
-testutil-module.c: eris-lua.h
+tools/harness-testutil.c: eris-lua.h
 
 ${OUT}/eris.so: ${ERIS_MODULE_OBJS} ${LIBDWARF}
 ${OUT}/eris.so: LDFLAGS += -shared
