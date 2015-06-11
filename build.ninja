@@ -31,8 +31,8 @@ rule ld
   description = Link $out
 
 
-include lua-${lua_build}.ninja
-include libdwarf-${libdwarf_build}.ninja
+include tools/ninja/lua-${lua_build}.ninja
+include tools/ninja/libdwarf-${libdwarf_build}.ninja
 
 build specials.inc : gperf specials.gperf
 

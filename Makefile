@@ -58,8 +58,8 @@ clean:
 distclean: clean
 .PHONY: distclean
 
-include lua-${lua_build}.mk
-include libdwarf-${libdwarf_build}.mk
+include tools/make/lua-${lua_build}.mk
+include tools/make/libdwarf-${libdwarf_build}.mk
 
 
 # Eris (non-JIT) module sources.
