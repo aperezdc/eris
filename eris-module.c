@@ -1234,7 +1234,6 @@ cvalue_get (lua_State          *L,
             } else {
                 ErisVariable *ev = to_eris_variable (L, lindex);
                 l_typecheck (L, lindex - 1, typeinfo, ev->typeinfo);
-                TRACE (">\t\tgot %p\n", ev->address);
                 *ADDR_OFF (void*, address, 0) = ev->address;
             }
             break;
