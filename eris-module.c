@@ -1192,13 +1192,9 @@ l_typecheck (lua_State          *L,
     if (!eris_typeinfo_equal (dst, src)) {
         l_typeinfo_push_stringrep (L, dst, false);
         l_typeinfo_push_stringrep (L, src, false);
-        if (idx <= 0) {
-            luaL_error (L, "expected value of type '%s', given '%s'",
-                        lua_tostring (L, -2), lua_tostring (L, -1));
-        } else {
-            luaL_error (L, "#%d: expected value of type '%s', given '%s'",
-                        idx, lua_tostring (L, -2), lua_tostring (L, -1));
-        }
+        luaL_error (L, "#%d: expected value of type '%s', given '%s'",
+                    (idx < 1) ? (lua_gettop (L) + idx) : idx,
+                    lua_tostring (L, -2), lua_tostring (L, -1));
     }
 }
 
