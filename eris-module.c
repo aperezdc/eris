@@ -937,7 +937,10 @@ eris_function_index (lua_State *L)
     ErisFunction *ef = to_eris_function (L);
     size_t length;
     const char *name = luaL_checklstring (L, 2, &length);
-    const ErisSpecial *s = eris_special_lookup (name, length);
+    const ErisSpecial *s = (length > 2 && name[0] == '_' && name[1] == '_')
+        ? eris_special_lookup (name + 2, length - 2)
+        : NULL;
+
     if (!s) return luaL_error (L, "invalid field '%s'", name);
 
     switch (s->code) {
@@ -1141,8 +1144,11 @@ eris_variable_index (lua_State *L)
     size_t named_field_length = 0;
     if (lua_type (L, 2) == LUA_TSTRING) {
         named_field = lua_tolstring (L, 2, &named_field_length);
-        const ErisSpecial *s = eris_special_lookup (named_field,
-                                                    named_field_length);
+        const ErisSpecial *s = (named_field_length > 2 &&
+                                named_field[0] == '_' &&
+                                named_field[1] == '_')
+            ? eris_special_lookup (named_field + 2, named_field_length - 2)
+            : NULL;
         if (s) return eris_variable_index_special (L, V, s->code);
     }
 
@@ -1296,7 +1302,9 @@ eris_variable_newindex (lua_State *L)
     if (lua_type (L, 2) == LUA_TSTRING) {
         size_t length;
         const char *name = lua_tolstring (L, 2, &length);
-        const ErisSpecial *s = eris_special_lookup (name, length);
+        const ErisSpecial *s = (length > 2 && name[0] == '_' && name[1] == '_')
+            ? eris_special_lookup (name + 2, length - 2)
+            : NULL;
         if (s) return eris_variable_newindex_special (L, 3, V, s->code);
     }
 

@@ -11,7 +11,7 @@ struct ErisSpecial {
 	ErisSpecialCode code;
 };
 %%
-__name, ERIS_SPECIAL_NAME
-__type, ERIS_SPECIAL_TYPE
-__value, ERIS_SPECIAL_VALUE
-__library, ERIS_SPECIAL_LIBRARY
+name, ERIS_SPECIAL_NAME
+type, ERIS_SPECIAL_TYPE
+value, ERIS_SPECIAL_VALUE
+library, ERIS_SPECIAL_LIBRARY
