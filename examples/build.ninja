@@ -25,14 +25,16 @@ rule wrap
   command = ./tools/make-example-wrapper-script ${lua_exe} ${in} ${obj} ${out}
   description = wrap-example ${in}
 
-build ${obj}/examples/type-pp     : wrap examples/type-pp.lua
-build ${obj}/examples/nanovg-demo : wrap examples/nanovg-demo.lua
-build ${obj}/examples/upng-info   : wrap examples/upng-info.lua
+build ${obj}/examples/type-pp      : wrap examples/type-pp.lua
+build ${obj}/examples/nanovg-demo  : wrap examples/nanovg-demo.lua
+build ${obj}/examples/nanovg-noise : wrap examples/nanovg-noise.lua
+build ${obj}/examples/upng-info    : wrap examples/upng-info.lua
 
-build examples-wrapper : phony  $
-      ${obj}/examples/type-pp   $
-      ${obj}/examples/upng-info $
-      ${obj}/examples/nanovg-demo
+build examples-wrapper : phony    $
+      ${obj}/examples/type-pp     $
+      ${obj}/examples/upng-info   $
+      ${obj}/examples/nanovg-demo $
+      ${obj}/examples/nanovg-noise
 
 build examples : phony $
       examples-wrapper $
