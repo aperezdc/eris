@@ -62,10 +62,10 @@ include tools/make/lua-${lua_build}.mk
 include tools/make/libdwarf-${libdwarf_build}.mk
 
 
-# Eris (non-JIT) module sources.
-ERIS_MODULE_SRCS := eris-module.c eris-trace.c eris-util.c eris-typing.c \
-                    eris-typecache.c eris-libdwarf.c
-ERIS_MODULE_OBJS := $(patsubst %.c,${OUT}/%.o,${ERIS_MODULE_SRCS})
+# EOL module sources.
+EOL_MODULE_SRCS := eol-module.c eol-trace.c eol-util.c eol-typing.c \
+                   eol-typecache.c eol-libdwarf.c
+EOL_MODULE_OBJS := $(patsubst %.c,${OUT}/%.o,${EOL_MODULE_SRCS})
 
 # Testutil module source.
 TESTUTIL_MODULE_SRCS := tools/harness-testutil.c
@@ -92,7 +92,7 @@ ${OUT}/%:
 
 
 all: ${LUA} \
-	 ${OUT}/eris.so \
+	 ${OUT}/eol.so \
 	 ${OUT}/testutil.so \
 	 ${OUT}/libtest2.so \
 	 ${OUT}/libtest.so
@@ -100,17 +100,17 @@ all: ${LUA} \
 
 clean:
 	$Q ${RM} ${OUT}/lua ${LUA_OBJS}
-	$Q ${RM} ${OUT}/eris.so ${ERIS_MODULE_OBJS}
+	$Q ${RM} ${OUT}/eol.so ${EOL_MODULE_OBJS}
 	$Q ${RM} ${OUT}/testutil.so ${TESTUTIL_MODULE_OBJS}
 	$Q ${RM} ${OUT}/libtest.so ${OUT}/libtest.o
 	$Q ${RM} ${OUT}/libtest2.so ${OUT}/libtest2.o
 
-eris-module.c: eris-lua.h eris-libdwarf.h specials.inc
-tools/harness-testutil.c: eris-lua.h
+eol-module.c: eol-lua.h eol-libdwarf.h specials.inc
+tools/harness-testutil.c: eol-lua.h
 
-${OUT}/eris.so: ${ERIS_MODULE_OBJS} ${LIBDWARF}
-${OUT}/eris.so: LDFLAGS += -shared
-${OUT}/eris.so: LDLIBS += ${LIBDWARF_LDLIBS}
+${OUT}/eol.so: ${EOL_MODULE_OBJS} ${LIBDWARF}
+${OUT}/eol.so: LDFLAGS += -shared
+${OUT}/eol.so: LDLIBS += ${LIBDWARF_LDLIBS}
 
 ${OUT}/testutil.so: ${TESTUTIL_MODULE_OBJS}
 ${OUT}/testutil.so: LDFLAGS += -shared

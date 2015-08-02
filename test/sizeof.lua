@@ -6,10 +6,10 @@
 -- Distributed under terms of the MIT license.
 --
 
-local eris = require("eris")
-assert.Field(eris, "sizeof")
+local eol = require("eol")
+assert.Field(eol, "sizeof")
 
-local libtest = eris.load("libtest")
+local libtest = eol.load("libtest")
 
-assert.Equal(4, eris.sizeof(libtest.var_i32))
-assert.Equal(4, eris.sizeof(libtest.var_i32.__type))
+assert.Equal(4, eol.sizeof(libtest.var_i32))
+assert.Equal(4, eol.sizeof(libtest.var_i32.__type))

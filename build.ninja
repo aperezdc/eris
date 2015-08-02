@@ -36,27 +36,27 @@ include tools/ninja/libdwarf-${libdwarf_build}.ninja
 
 build specials.inc : gperf specials.gperf
 
-# Lua module: eris.so
+# Lua module: eol.so
 #
-build ${obj}/eris-util.o      : cc eris-util.c
-build ${obj}/eris-trace.o     : cc eris-trace.c
-build ${obj}/eris-typing.o    : cc eris-typing.c
-build ${obj}/eris-libdwarf.o  : cc eris-libdwarf.c
-build ${obj}/eris-typecache.o : cc eris-typecache.c
-build ${obj}/eris-module.o    : cc eris-module.c | specials.inc eris-lua.h eris-libdwarf.h
-build ${obj}/eris.so : ld     $
-      ${obj}/eris-util.o      $
-      ${obj}/eris-trace.o     $
-      ${obj}/eris-typing.o    $
-      ${obj}/eris-libdwarf.o  $
-      ${obj}/eris-typecache.o $
-      ${obj}/eris-module.o    | ${libdwarf_dep}
+build ${obj}/eol-util.o      : cc eol-util.c
+build ${obj}/eol-trace.o     : cc eol-trace.c
+build ${obj}/eol-typing.o    : cc eol-typing.c
+build ${obj}/eol-libdwarf.o  : cc eol-libdwarf.c
+build ${obj}/eol-typecache.o : cc eol-typecache.c
+build ${obj}/eol-module.o    : cc eol-module.c | specials.inc eol-lua.h eol-libdwarf.h
+build ${obj}/eol.so : ld     $
+      ${obj}/eol-util.o      $
+      ${obj}/eol-trace.o     $
+      ${obj}/eol-typing.o    $
+      ${obj}/eol-libdwarf.o  $
+      ${obj}/eol-typecache.o $
+      ${obj}/eol-module.o    | ${libdwarf_dep}
   ldflags = ${ldflags} -shared
   libs = ${libs} ${libdwarf_lib} -lelf
 
 # Lua module: testutil.so
 #
-build ${obj}/testutil.o  : cc tools/harness-testutil.c | eris-lua.h
+build ${obj}/testutil.o  : cc tools/harness-testutil.c | eol-lua.h
 build ${obj}/testutil.so : ld ${obj}/testutil.o
   ldflags = ${ldflags} -shared
 
@@ -74,7 +74,7 @@ build all : phony  $
 ${obj}/libtest.so  $
 ${obj}/libtest2.so $
 ${obj}/testutil.so $
-${obj}/eris.so
+${obj}/eol.so
 
 default all
 

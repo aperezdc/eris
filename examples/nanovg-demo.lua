@@ -47,7 +47,7 @@ local function graph(vg, x, y, w, h, t)
 	nvg.Fill(vg)
 end
 
-local window = nvg.Window("Lua + Eris + NanoVG", W, H)
+local window = nvg.Window("Lua + Eol + NanoVG", W, H)
 nvg.MakeCurrent(window)
 
 local vg = nvg.Create(true)

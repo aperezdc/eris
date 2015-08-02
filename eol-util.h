@@ -1,12 +1,12 @@
 /*
- * eris-util.h
+ * eol-util.h
  * Copyright (C) 2015 Adrian Perez <aperez@igalia.com>
  *
  * Distributed under terms of the MIT license.
  */
 
-#ifndef ERIS_UTIL_H
-#define ERIS_UTIL_H
+#ifndef EOL_UTIL_H
+#define EOL_UTIL_H
 
 #include <inttypes.h>
 #include <stdbool.h>
@@ -19,10 +19,10 @@
 /*
  * Debug checks.
  */
-#if defined(ERIS_RUNTIME_CHECKS) && ERIS_RUNTIME_CHECKS > 0
+#if defined(EOL_RUNTIME_CHECKS) && EOL_RUNTIME_CHECKS > 0
 
 # define CHECK_FAILED(...) \
-    eris_runtime_check_failed (__FILE__, __LINE__, __func__, __VA_ARGS__)
+    eol_runtime_check_failed (__FILE__, __LINE__, __func__, __VA_ARGS__)
 
 # define CHECK_UNREACHABLE( ) CHECK_FAILED ("Unreachable code\n")
 
@@ -70,21 +70,21 @@
                           eval_expression);                 \
     } while (0);
 
-extern void eris_runtime_check_failed (const char *file,
-                                       unsigned    line,
-                                       const char *func,
-                                       const char *fmt,
-                                       ...);
-#else /* !ERIS_DEBUG_CHECKS */
-# undef ERIS_RUNTIME_CHECKS
-# define ERIS_RUNTIME_CHECKS 0
+extern void eol_runtime_check_failed (const char *file,
+                                      unsigned    line,
+                                      const char *func,
+                                      const char *fmt,
+                                      ...);
+#else /* !EOL_DEBUG_CHECKS */
+# undef EOL_RUNTIME_CHECKS
+# define EOL_RUNTIME_CHECKS 0
 # define CHECK(e)                        ((void) 0)
 # define CHECK_UNREACHABLE( )            ((void) 0)
 # define CHECK_NUMERIC_OP(o, e, x, t, f) ((void) 0)
 # define CHECK_NOT_NULL(e)               ((void) 0)
 # define CHECK_NOT_ZERO(e)               ((void) 0)
 # define CHECK_STR_EQ(e, x)              ((void) 0)
-#endif /* ERIS_DEBUG_CHECKS */
+#endif /* EOL_DEBUG_CHECKS */
 
 #define CHECK_I8_EQ(e, x)    CHECK_NUMERIC_OP (==, e, x, int8_t,   PRIi8)
 #define CHECK_U8_EQ(e, x)    CHECK_NUMERIC_OP (==, e, x, uint8_t,  PRIu8)
@@ -211,4 +211,4 @@ string_equal (const char *a,
     return (a == b) || (a && b && strcmp (a, b) == 0);
 }
 
-#endif /* !ERIS_UTIL_H */
+#endif /* !EOL_UTIL_H */

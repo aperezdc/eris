@@ -6,11 +6,11 @@
 -- Distributed under terms of the MIT license.
 --
 
-local libtest = require("eris").load("libtest")
+local libtest = require("eol").load("libtest")
 assert(libtest, "could not load libtest.so")
 
 local add = libtest.add
 assert.Not.Nil(add)
-assert.Userdata(add, "org.perezdecastro.eris.Function")
+assert.Userdata(add, "org.perezdecastro.eol.Function")
 assert.Callable(add)
 assert.Equal(libtest, add.__library)

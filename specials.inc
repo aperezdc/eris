@@ -30,9 +30,9 @@
 #endif
 
 #line 9 "specials.gperf"
-struct ErisSpecial {
+struct EolSpecial {
 	const char *name;
-	ErisSpecialCode code;
+	EolSpecialCode code;
 };
 #include <string.h>
 /* maximum key range = 6, duplicates = 0 */
@@ -45,7 +45,7 @@ inline
 #endif
 #endif
 static unsigned int
-eris_special_hash (register const char *str, register unsigned int len)
+eol_special_hash (register const char *str, register unsigned int len)
 {
   static const unsigned char asso_values[] =
     {
@@ -85,8 +85,8 @@ __inline
 __attribute__ ((__gnu_inline__))
 #endif
 #endif
-const struct ErisSpecial *
-eris_special_lookup (register const char *str, register unsigned int len)
+const struct EolSpecial *
+eol_special_lookup (register const char *str, register unsigned int len)
 {
   enum
     {
@@ -97,24 +97,24 @@ eris_special_lookup (register const char *str, register unsigned int len)
       MAX_HASH_VALUE = 9
     };
 
-  static const struct ErisSpecial wordlist[] =
+  static const struct EolSpecial wordlist[] =
     {
       {""}, {""}, {""}, {""},
 #line 15 "specials.gperf"
-      {"type", ERIS_SPECIAL_TYPE},
+      {"type", EOL_SPECIAL_TYPE},
 #line 16 "specials.gperf"
-      {"value", ERIS_SPECIAL_VALUE},
+      {"value", EOL_SPECIAL_VALUE},
       {""},
 #line 17 "specials.gperf"
-      {"library", ERIS_SPECIAL_LIBRARY},
+      {"library", EOL_SPECIAL_LIBRARY},
       {""},
 #line 14 "specials.gperf"
-      {"name", ERIS_SPECIAL_NAME}
+      {"name", EOL_SPECIAL_NAME}
     };
 
   if (len <= MAX_WORD_LENGTH && len >= MIN_WORD_LENGTH)
     {
-      register int key = eris_special_hash (str, len);
+      register int key = eol_special_hash (str, len);
 
       if (key <= MAX_HASH_VALUE && key >= 0)
         {

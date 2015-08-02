@@ -1,12 +1,12 @@
 /*
- * eris-libdwarf.c
+ * eol-libdwarf.c
  * Copyright (C) 2015 Adrian Perez <aperez@igalia.com>
  *
  * Distributed under terms of the MIT license.
  */
 
-#include "eris-libdwarf.h"
-#include "eris-trace.h"
+#include "eol-libdwarf.h"
+#include "eol-trace.h"
 
 #include <stdlib.h>
 #include <stdio.h>

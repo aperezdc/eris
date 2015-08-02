@@ -1,17 +1,16 @@
 /*
- * eris-module.c
+ * eol-module.c
  * Copyright (C) 2015 Adrian Perez <aperez@igalia.com>
  *
  * Distributed under terms of the MIT license.
  */
 
-#include "eris-libdwarf.h"
-#include "eris-lua.h"
-#include "eris-typing.h"
-#include "eris-typecache.h"
-#include "eris-trace.h"
-#include "eris-util.h"
-#include "uthash.h"
+#include "eol-libdwarf.h"
+#include "eol-lua.h"
+#include "eol-typing.h"
+#include "eol-typecache.h"
+#include "eol-trace.h"
+#include "eol-util.h"
 
 #include <libelf.h>
 #include <dlfcn.h>
@@ -23,31 +22,31 @@
 #include <fcntl.h>
 #include <errno.h>
 
-typedef struct _ErisFunction ErisFunction;
-#include "eris-fcall.h"
+typedef struct _EolFunction EolFunction;
+#include "eol-fcall.h"
 
-#ifndef ERIS_LIB_SUFFIX
-#define ERIS_LIB_SUFFIX ".so"
-#endif /* !ERIS_LIB_SUFFIX */
+#ifndef EOL_LIB_SUFFIX
+#define EOL_LIB_SUFFIX ".so"
+#endif /* !EOL_LIB_SUFFIX */
 
 
-typedef struct ErisSpecial ErisSpecial;
+typedef struct EolSpecial EolSpecial;
 typedef enum {
-    ERIS_SPECIAL_NAME,
-    ERIS_SPECIAL_TYPE,
-    ERIS_SPECIAL_VALUE,
-    ERIS_SPECIAL_LIBRARY,
-} ErisSpecialCode;
+    EOL_SPECIAL_NAME,
+    EOL_SPECIAL_TYPE,
+    EOL_SPECIAL_VALUE,
+    EOL_SPECIAL_LIBRARY,
+} EolSpecialCode;
 
 #include "specials.inc"
 
 
-typedef struct _ErisLibrary  ErisLibrary;
+typedef struct _EolLibrary  EolLibrary;
 
 /*
- * Data needed for each library loaded by "eris.load()".
+ * Data needed for each library loaded by "eol.load()".
  */
-struct _ErisLibrary {
+struct _EolLibrary {
     REF_COUNTER;
 
     char         *path;
@@ -61,113 +60,107 @@ struct _ErisLibrary {
     Dwarf_Type   *d_types;
     Dwarf_Signed  d_num_types;
 
-    ErisTypeCache type_cache;
-    ErisLibrary  *next;
+    EolTypeCache  type_cache;
+    EolLibrary   *next;
 };
 
 
-static ErisLibrary *library_list = NULL;
+static EolLibrary *library_list = NULL;
 
 
-static const char ERIS_LIBRARY[]  = "org.perezdecastro.eris.Library";
+static const char EOL_LIBRARY[]  = "org.perezdecastro.eol.Library";
 
-static void eris_library_free (ErisLibrary*);
-REF_COUNTER_FUNCTIONS (ErisLibrary, eris_library, static inline)
-
-static inline const ErisTypeInfo*
-eris_library_fetch_die_type_ref_cached (ErisLibrary *library,
-                                        Dwarf_Die    d_die,
-                                        Dwarf_Half   d_tag,
-                                        Dwarf_Error *d_error);
+static void library_free (EolLibrary*);
+REF_COUNTER_FUNCTIONS (EolLibrary, library, static inline)
 
 
 static inline void
-eris_library_push_userdata (lua_State *L, ErisLibrary *el)
+library_push_userdata (lua_State *L, EolLibrary *el)
 {
     CHECK_NOT_NULL (el);
 
-    ErisLibrary **elp = lua_newuserdata (L, sizeof (ErisLibrary*));
-    *elp = eris_library_ref (el);
-    luaL_setmetatable (L, ERIS_LIBRARY);
+    EolLibrary **elp = lua_newuserdata (L, sizeof (EolLibrary*));
+    *elp = library_ref (el);
+    luaL_setmetatable (L, EOL_LIBRARY);
 }
 
-static inline ErisLibrary*
-to_eris_library (lua_State *L, int index)
+static inline EolLibrary*
+to_eol_library (lua_State *L, int index)
 {
-    return *((ErisLibrary**) luaL_checkudata (L, index, ERIS_LIBRARY));
+    return *((EolLibrary**) luaL_checkudata (L, index, EOL_LIBRARY));
 }
 
 
-static const char ERIS_TYPEINFO[] = "org.perezdecastro.eris.TypeInfo";
+static const char EOL_TYPEINFO[] = "org.perezdecastro.eol.TypeInfo";
 
 static inline void
-eris_typeinfo_push_userdata (lua_State *L, const ErisTypeInfo *ti)
+typeinfo_push_userdata (lua_State *L, const EolTypeInfo *ti)
 {
     CHECK_NOT_NULL (ti);
 
-    const ErisTypeInfo **tip = lua_newuserdata (L, sizeof (const ErisTypeInfo*));
+    const EolTypeInfo **tip = lua_newuserdata (L, sizeof (const EolTypeInfo*));
     *tip = ti;
-    luaL_setmetatable (L, ERIS_TYPEINFO);
+    luaL_setmetatable (L, EOL_TYPEINFO);
 }
 
-static inline const ErisTypeInfo*
-to_eris_typeinfo (lua_State *L, int index)
+static inline const EolTypeInfo*
+to_eol_typeinfo (lua_State *L, int index)
 {
-    return *((const ErisTypeInfo**) luaL_checkudata (L, index, ERIS_TYPEINFO));
+    return *((const EolTypeInfo**) luaL_checkudata (L, index, EOL_TYPEINFO));
 }
 
 
 static void
-l_typeinfo_tobuffer (luaL_Buffer        *b,
-                     const ErisTypeInfo *typeinfo,
-                     bool                verbose)
+typeinfo_tobuffer (luaL_Buffer       *b,
+                   const EolTypeInfo *typeinfo,
+                   bool               verbose)
 {
     CHECK_NOT_NULL (b);
     CHECK_NOT_NULL (typeinfo);
 
-    bool has_name = eris_typeinfo_name (typeinfo) != NULL;
+    bool has_name = eol_typeinfo_name (typeinfo) != NULL;
 
-    switch (eris_typeinfo_type (typeinfo)) {
-        case ERIS_TYPE_CONST:
+    switch (eol_typeinfo_type (typeinfo)) {
+        case EOL_TYPE_CONST:
             luaL_addstring (b, "const ");
-            l_typeinfo_tobuffer (b, eris_typeinfo_base (typeinfo), false);
+            typeinfo_tobuffer (b, eol_typeinfo_base (typeinfo), false);
             break;
 
-        case ERIS_TYPE_TYPEDEF:
+        case EOL_TYPE_TYPEDEF:
             if (verbose) {
                 luaL_addstring (b, "typedef ");
-                l_typeinfo_tobuffer (b, eris_typeinfo_base (typeinfo), false);
+                typeinfo_tobuffer (b, eol_typeinfo_base (typeinfo), false);
                 luaL_addchar (b, ' ');
             }
-            luaL_addstring (b, eris_typeinfo_name (typeinfo));
+            luaL_addstring (b, eol_typeinfo_name (typeinfo));
             break;
 
-        case ERIS_TYPE_POINTER:
-            l_typeinfo_tobuffer (b, eris_typeinfo_base (typeinfo), false);
+        case EOL_TYPE_POINTER:
+            typeinfo_tobuffer (b, eol_typeinfo_base (typeinfo), false);
             luaL_addchar (b, '*');
             break;
 
-        case ERIS_TYPE_ARRAY:
-            l_typeinfo_tobuffer (b, eris_typeinfo_base (typeinfo), false);
+        case EOL_TYPE_ARRAY:
+            typeinfo_tobuffer (b, eol_typeinfo_base (typeinfo), false);
             luaL_addchar (b, '[');
-            lua_pushinteger (b->L, eris_typeinfo_array_n_items (typeinfo));
+            lua_pushinteger (b->L, eol_typeinfo_array_n_items (typeinfo));
             luaL_addvalue (b);
             luaL_addchar (b, ']');
             break;
 
-        case ERIS_TYPE_ENUM:
+        case EOL_TYPE_ENUM:
             luaL_addstring (b, "enum");
             if (has_name) {
                 luaL_addchar (b, ' ');
-                luaL_addstring (b, eris_typeinfo_name (typeinfo));
+                luaL_addstring (b, eol_typeinfo_name (typeinfo));
             }
             if (verbose || !has_name) {
                 luaL_addstring (b, " {");
-                const uint32_t n = eris_typeinfo_compound_n_members (typeinfo);
+                const uint32_t n = eol_typeinfo_compound_n_members (typeinfo);
                 for (uint32_t i = 0; i < n; i++) {
                     if (i > 0) luaL_addstring (b, ",");
-                    const ErisTypeInfoMember *member =
-                            eris_typeinfo_compound_const_member (typeinfo, i);
+                    const EolTypeInfoMember *member =
+                            eol_typeinfo_compound_const_member (typeinfo, i);
                     luaL_addchar (b, ' ');
                     luaL_addstring (b, member->name);
                 }
@@ -175,21 +168,21 @@ l_typeinfo_tobuffer (luaL_Buffer        *b,
             }
             break;
 
-        case ERIS_TYPE_STRUCT:
+        case EOL_TYPE_STRUCT:
             luaL_addstring (b, "struct");
             if (has_name) {
                 luaL_addchar (b, ' ');
-                luaL_addstring (b, eris_typeinfo_name (typeinfo));
+                luaL_addstring (b, eol_typeinfo_name (typeinfo));
             }
             if (verbose || !has_name) {
                 luaL_addstring (b, " {");
-                const uint32_t n = eris_typeinfo_compound_n_members (typeinfo);
+                const uint32_t n = eol_typeinfo_compound_n_members (typeinfo);
                 for (uint32_t i = 0; i < n; i++) {
                     if (i > 0) luaL_addstring (b, ";");
-                    const ErisTypeInfoMember *member =
-                            eris_typeinfo_compound_const_member (typeinfo, i);
+                    const EolTypeInfoMember *member =
+                            eol_typeinfo_compound_const_member (typeinfo, i);
                     luaL_addchar (b, ' ');
-                    l_typeinfo_tobuffer (b, member->typeinfo, false);
+                    typeinfo_tobuffer (b, member->typeinfo, false);
                     if (member->name) {
                         luaL_addchar (b, ' ');
                         luaL_addstring (b, member->name);
@@ -201,7 +194,7 @@ l_typeinfo_tobuffer (luaL_Buffer        *b,
 
         default:
             if (has_name) {
-                luaL_addstring (b, eris_typeinfo_name (typeinfo));
+                luaL_addstring (b, eol_typeinfo_name (typeinfo));
             } else {
                 luaL_addstring (b, "(unnamed)");
             }
@@ -210,15 +203,15 @@ l_typeinfo_tobuffer (luaL_Buffer        *b,
 
 
 static int
-l_typeinfo_push_stringrep (lua_State          *L,
-                           const ErisTypeInfo *typeinfo,
-                           bool                verbose)
+typeinfo_push_stringrep (lua_State         *L,
+                         const EolTypeInfo *typeinfo,
+                         bool               verbose)
 {
     CHECK_NOT_NULL (typeinfo);
     luaL_Buffer b;
     luaL_buffinit (L, &b);
-    luaL_addstring (&b, "eris.type (");
-    l_typeinfo_tobuffer (&b, typeinfo, verbose);
+    luaL_addstring (&b, "eol.type (");
+    typeinfo_tobuffer (&b, typeinfo, verbose);
     luaL_addchar (&b, ')');
     luaL_pushresult (&b);
     return 1;
@@ -226,22 +219,22 @@ l_typeinfo_push_stringrep (lua_State          *L,
 
 
 static int
-l_eris_typeinfo_tostring (lua_State *L)
+typeinfo_tostring (lua_State *L)
 {
-    const ErisTypeInfo *typeinfo = to_eris_typeinfo (L, 1);
-    return l_typeinfo_push_stringrep (L, typeinfo, false);
+    const EolTypeInfo *typeinfo = to_eol_typeinfo (L, 1);
+    return typeinfo_push_stringrep (L, typeinfo, false);
 }
 
 
 static inline const char*
-l_eris_typeinfo_type_string (const ErisTypeInfo *typeinfo)
+typeinfo_type_string (const EolTypeInfo *typeinfo)
 {
     CHECK_NOT_NULL (typeinfo);
 
 #define RETURN_TYPE_STRING_ITEM(suffix, name, _) \
-        case ERIS_TYPE_ ## suffix: return #name;
+        case EOL_TYPE_ ## suffix: return #name;
 
-    switch (eris_typeinfo_type (typeinfo)) {
+    switch (eol_typeinfo_type (typeinfo)) {
         ALL_TYPES (RETURN_TYPE_STRING_ITEM)
     }
 
@@ -253,34 +246,66 @@ l_eris_typeinfo_type_string (const ErisTypeInfo *typeinfo)
 
 
 static int
-l_eris_typeinfo_index (lua_State *L)
+typeinfo_pointerto (lua_State *L)
 {
-    const ErisTypeInfo *typeinfo = to_eris_typeinfo (L, 1);
+    /*
+     * FIXME: This leaks the newly created EolTypeInfo. It should be added to
+     *        the type cache, or (even better) look up an existing item from
+     *        it before adding it.
+     */
+    const EolTypeInfo *typeinfo = to_eol_typeinfo (L, 1);
+    typeinfo_push_userdata (L, eol_typeinfo_new_pointer (typeinfo));
+    return 1;
+}
+
+
+static int
+typeinfo_arrayof (lua_State *L)
+{
+    /*
+     * FIXME: This leaks the newly created EolTypeInfo. It should be added to
+     *        the type cache, or (even better) look up an existing item from
+     *        it before adding it.
+     */
+    const EolTypeInfo *typeinfo = to_eol_typeinfo (L, 1);
+    lua_Integer n_items = luaL_checkinteger (L, 2);
+    if (n_items <= 0) {
+        return luaL_error (L, "parameter #2 must be a positive integer");
+    }
+    typeinfo_push_userdata (L, eol_typeinfo_new_array (typeinfo, n_items));
+    return 1;
+}
+
+
+static int
+typeinfo_index (lua_State *L)
+{
+    const EolTypeInfo *typeinfo = to_eol_typeinfo (L, 1);
     lua_settop (L, 2);
     if (lua_isinteger (L, 2)) {
-        if (!(typeinfo = eris_typeinfo_get_compound (typeinfo))) {
+        if (!(typeinfo = eol_typeinfo_get_compound (typeinfo))) {
             return luaL_error (L, "type is not a struct or union");
         }
 
-        uint32_t n_members = eris_typeinfo_compound_n_members (typeinfo);
+        uint32_t n_members = eol_typeinfo_compound_n_members (typeinfo);
         lua_Integer index = luaL_checkinteger (L, 2);
         if (index < 1 || index > n_members) {
             return luaL_error (L, "index %d out of bounds (length=%d)",
                                index, (lua_Integer) n_members);
         }
 
-        const ErisTypeInfoMember *member =
-                eris_typeinfo_compound_const_member (typeinfo, index - 1);
+        const EolTypeInfoMember *member =
+                eol_typeinfo_compound_const_member (typeinfo, index - 1);
         lua_createtable (L, 0, 3);
 
         lua_pushstring (L, member->name);
         lua_setfield (L, -2, "name");
 
-        if (eris_typeinfo_is_enum (typeinfo)) {
+        if (eol_typeinfo_is_enum (typeinfo)) {
             lua_pushinteger (L, member->value);
             lua_setfield (L, -2, "value");
         } else {
-            eris_typeinfo_push_userdata (L, member->typeinfo);
+            typeinfo_push_userdata (L, member->typeinfo);
             lua_setfield (L, -2, "type");
             lua_pushinteger (L, member->offset);
             lua_setfield (L, -2, "offset");
@@ -288,16 +313,20 @@ l_eris_typeinfo_index (lua_State *L)
     } else {
         const char *field = luaL_checkstring (L, 2);
         if (!strcmp ("name", field)) {
-            lua_pushstring (L, eris_typeinfo_name (typeinfo));
+            lua_pushstring (L, eol_typeinfo_name (typeinfo));
         } else if (!strcmp ("sizeof", field)) {
-            lua_pushinteger (L, eris_typeinfo_sizeof (typeinfo));
+            lua_pushinteger (L, eol_typeinfo_sizeof (typeinfo));
         } else if (!strcmp ("readonly", field)) {
-            lua_pushboolean (L, eris_typeinfo_is_readonly (typeinfo));
+            lua_pushboolean (L, eol_typeinfo_is_readonly (typeinfo));
         } else if (string_equal ("kind", field)) {
-            lua_pushstring (L, l_eris_typeinfo_type_string (typeinfo));
+            lua_pushstring (L, typeinfo_type_string (typeinfo));
         } else if (string_equal ("type", field)) {
-            const ErisTypeInfo *base = eris_typeinfo_base (typeinfo);
-            if (base) eris_typeinfo_push_userdata (L, base);
+            const EolTypeInfo *base = eol_typeinfo_base (typeinfo);
+            if (base) typeinfo_push_userdata (L, base);
+        } else if (string_equal ("pointerto", field)) {
+            lua_pushcfunction (L, typeinfo_pointerto);
+        } else if (string_equal ("arrayof", field)) {
+            lua_pushcfunction (L, typeinfo_arrayof);
         } else {
             return luaL_error (L, "invalid field '%s'", field);
         }
@@ -306,15 +335,15 @@ l_eris_typeinfo_index (lua_State *L)
 }
 
 static int
-l_eris_typeinfo_len (lua_State *L)
+typeinfo_len (lua_State *L)
 {
-    const ErisTypeInfo *typeinfo = to_eris_typeinfo (L, 1);
-    typeinfo = eris_typeinfo_get_non_synthetic (typeinfo);
+    const EolTypeInfo *typeinfo = to_eol_typeinfo (L, 1);
+    typeinfo = eol_typeinfo_get_non_synthetic (typeinfo);
 
-    if (eris_typeinfo_is_array (typeinfo)) {
-        lua_pushinteger (L, eris_typeinfo_array_n_items (typeinfo));
-    } else if ((typeinfo = eris_typeinfo_get_compound (typeinfo))) {
-        lua_pushinteger (L, eris_typeinfo_compound_n_members (typeinfo));
+    if (eol_typeinfo_is_array (typeinfo)) {
+        lua_pushinteger (L, eol_typeinfo_array_n_items (typeinfo));
+    } else if ((typeinfo = eol_typeinfo_get_compound (typeinfo))) {
+        lua_pushinteger (L, eol_typeinfo_compound_n_members (typeinfo));
     } else {
         return luaL_error (L, "type is not a struct or union");
     }
@@ -322,103 +351,109 @@ l_eris_typeinfo_len (lua_State *L)
 }
 
 static int
-l_eris_typeinfo_eq (lua_State *L)
+typeinfo_eq (lua_State *L)
 {
-    const ErisTypeInfo *typeinfo_a = to_eris_typeinfo (L, 1);
-    const ErisTypeInfo *typeinfo_b = to_eris_typeinfo (L, 2);
-    lua_pushboolean (L, eris_typeinfo_equal (typeinfo_a, typeinfo_b));
+    const EolTypeInfo *typeinfo_a = to_eol_typeinfo (L, 1);
+    const EolTypeInfo *typeinfo_b = to_eol_typeinfo (L, 2);
+    lua_pushboolean (L, eol_typeinfo_equal (typeinfo_a, typeinfo_b));
     return 1;
 }
 
-static int l_eris_typeinfo_call (lua_State *L);
+static int typeinfo_call (lua_State *L);
 
-static const luaL_Reg eris_typeinfo_methods[] = {
-    { "__tostring", l_eris_typeinfo_tostring  },
-    { "__index",    l_eris_typeinfo_index     },
-    { "__len",      l_eris_typeinfo_len       },
-    { "__eq",       l_eris_typeinfo_eq        },
-    { "__call",     l_eris_typeinfo_call      },
+static const luaL_Reg typeinfo_methods[] = {
+    { "__tostring", typeinfo_tostring },
+    { "__index",    typeinfo_index    },
+    { "__len",      typeinfo_len      },
+    { "__eq",       typeinfo_eq       },
+    { "__call",     typeinfo_call     },
     { NULL, NULL },
 };
 
 
 
 static Dwarf_Off
-eris_library_get_tue_offset (ErisLibrary *library,
-                             const char  *name,
-                             Dwarf_Error *d_error);
+library_get_tue_offset (EolLibrary *library,
+                        const char  *name,
+                        Dwarf_Error *d_error);
 static Dwarf_Die
-eris_library_fetch_die (ErisLibrary *library,
+library_fetch_die (EolLibrary  *library,
+                   Dwarf_Off    d_offset,
+                   Dwarf_Error *d_error);
+
+static inline const EolTypeInfo*
+library_fetch_die_type_ref_cached (EolLibrary  *library,
+                                   Dwarf_Die    d_die,
+                                   Dwarf_Half   d_tag,
+                                   Dwarf_Error *d_error);
+
+static const EolTypeInfo*
+library_lookup_type (EolLibrary  *library,
+                     Dwarf_Off    d_offset,
+                     Dwarf_Error *d_error);
+
+static const EolTypeInfo*
+library_build_typeinfo (EolLibrary  *library,
                         Dwarf_Off    d_offset,
                         Dwarf_Error *d_error);
 
-static const ErisTypeInfo*
-eris_library_lookup_type (ErisLibrary *library,
-                          Dwarf_Off    d_offset,
-                          Dwarf_Error *d_error);
-
-static const ErisTypeInfo*
-eris_library_build_typeinfo (ErisLibrary *library,
-                             Dwarf_Off    d_offset,
-                             Dwarf_Error *d_error);
-
-static Dwarf_Die lookup_die (ErisLibrary *library,
+static Dwarf_Die lookup_die (EolLibrary  *library,
                              const char  *name,
                              Dwarf_Error *d_error);
 
 
 /*
- * FIXME: This makes ErisVariable/ErisFunction keep a reference to their
- *        corresponding ErisLibrary, which itself might be GCd while there
+ * FIXME: This makes EolVariable/EolFunction keep a reference to their
+ *        corresponding EolLibrary, which itself might be GCd while there
  *        are still live references to it!
  */
-#define ERIS_COMMON_FIELDS \
-    ErisLibrary *library;  \
-    void        *address;  \
-    char        *name
+#define EOL_COMMON_FIELDS \
+    EolLibrary *library;  \
+    void       *address;  \
+    char       *name
 
 
 /*
- * Any structure that uses ERIS_COMMON_FIELDS at its start can be casted to
+ * Any structure that uses EOL_COMMON_FIELDS at its start can be casted to
  * this struct type.
  */
 typedef struct {
-    ERIS_COMMON_FIELDS;
-} ErisSymbol;
+    EOL_COMMON_FIELDS;
+} EolSymbol;
 
 
-struct _ErisFunction {
-    ERIS_COMMON_FIELDS;
-    ERIS_FUNCTION_FCALL_FIELDS;
-    const ErisTypeInfo *return_typeinfo;
-    uint32_t            n_param;
-    const ErisTypeInfo *param_types[];
+struct _EolFunction {
+    EOL_COMMON_FIELDS;
+    EOL_FUNCTION_FCALL_FIELDS;
+    const EolTypeInfo *return_typeinfo;
+    uint32_t           n_param;
+    const EolTypeInfo *param_types[];
 };
 
 typedef struct {
-    ERIS_COMMON_FIELDS;
+    EOL_COMMON_FIELDS;
     union {
-        ErisTypeInfo       *typeinfo;
-        const ErisTypeInfo *typeinfo_const;
+        EolTypeInfo       *typeinfo;
+        const EolTypeInfo *typeinfo_const;
     };
     bool                    typeinfo_owned;
-} ErisVariable;
+} EolVariable;
 
 
-static const char ERIS_FUNCTION[] = "org.perezdecastro.eris.Function";
-static const char ERIS_VARIABLE[] = "org.perezdecastro.eris.Variable";
+static const char EOL_FUNCTION[] = "org.perezdecastro.eol.Function";
+static const char EOL_VARIABLE[] = "org.perezdecastro.eol.Variable";
 
 
-static inline ErisFunction*
-to_eris_function (lua_State *L)
+static inline EolFunction*
+to_eol_function (lua_State *L)
 {
-    return (ErisFunction*) luaL_checkudata (L, 1, ERIS_FUNCTION);
+    return (EolFunction*) luaL_checkudata (L, 1, EOL_FUNCTION);
 }
 
-static inline ErisVariable*
-to_eris_variable (lua_State *L, int index)
+static inline EolVariable*
+to_eol_variable (lua_State *L, int index)
 {
-    return (ErisVariable*) luaL_checkudata (L, index, ERIS_VARIABLE);
+    return (EolVariable*) luaL_checkudata (L, index, EOL_VARIABLE);
 }
 
 
@@ -435,7 +470,7 @@ find_library (const char *name, char path[PATH_MAX])
 
     char try_path[PATH_MAX];
     for (size_t i = 0; i < LENGTH_OF (search_paths); i++) {
-        if (snprintf (try_path, PATH_MAX, "%s%s" ERIS_LIB_SUFFIX,
+        if (snprintf (try_path, PATH_MAX, "%s%s" EOL_LIB_SUFFIX,
                       search_paths[i], name) > PATH_MAX) {
             return false;
         }
@@ -453,11 +488,11 @@ find_library (const char *name, char path[PATH_MAX])
 
 
 static
-void eris_library_free (ErisLibrary *el)
+void library_free (EolLibrary *el)
 {
-    TRACE_PTR (<, ErisLibrary, el, "\n");
+    TRACE_PTR (<, EolLibrary, el, "\n");
 
-    eris_type_cache_free (&el->type_cache);
+    eol_type_cache_free (&el->type_cache);
 
     if (el->d_globals)
         dwarf_globals_dealloc (el->d_debug, el->d_globals, el->d_num_globals);
@@ -474,7 +509,7 @@ void eris_library_free (ErisLibrary *el)
     if (library_list == el) {
         library_list = library_list->next;
     } else {
-        ErisLibrary *prev = library_list;
+        EolLibrary *prev = library_list;
         while (prev->next && prev->next != el) prev = prev->next;
         prev->next = prev->next->next;
     }
@@ -484,37 +519,37 @@ void eris_library_free (ErisLibrary *el)
 
 
 static int
-eris_library_gc (lua_State *L)
+library_gc (lua_State *L)
 {
-    ErisLibrary *el = to_eris_library (L, 1);
-    eris_library_unref (el);
+    EolLibrary *el = to_eol_library (L, 1);
+    library_unref (el);
     return 0;
 }
 
 
 static int
-eris_library_tostring (lua_State *L)
+library_tostring (lua_State *L)
 {
-    ErisLibrary *el = to_eris_library (L, 1);
+    EolLibrary *el = to_eol_library (L, 1);
     if (el->d_debug) {
-        lua_pushfstring (L, "eris.library (%p)", el->d_debug);
+        lua_pushfstring (L, "eol.library (%p)", el->d_debug);
     } else {
-        lua_pushliteral (L, "eris.library (closed)");
+        lua_pushliteral (L, "eol.library (closed)");
     }
     return 1;
 }
 
 
 static inline void
-eris_symbol_init (ErisSymbol  *symbol,
-                  ErisLibrary *library,
-                  void        *address,
-                  const char  *name)
+symbol_init (EolSymbol  *symbol,
+             EolLibrary *library,
+             void        *address,
+             const char  *name)
 {
     CHECK_NOT_NULL (address);
-    memset (symbol, 0x00, sizeof (ErisSymbol));
+    memset (symbol, 0x00, sizeof (EolSymbol));
     if (library)
-        symbol->library = eris_library_ref (library);
+        symbol->library = library_ref (library);
     if (name)
         symbol->name = strdup (name);
     symbol->address = address;
@@ -522,19 +557,19 @@ eris_symbol_init (ErisSymbol  *symbol,
 
 
 static inline void
-eris_symbol_free (ErisSymbol *symbol)
+symbol_free (EolSymbol *symbol)
 {
     if (symbol->library)
-        eris_library_unref (symbol->library);
+        library_unref (symbol->library);
     free (symbol->name);
-    memset (symbol, 0xCA, sizeof (ErisSymbol));
+    memset (symbol, 0xCA, sizeof (EolSymbol));
 }
 
 
 static int
-l_eris_typeinfo_call (lua_State *L)
+typeinfo_call (lua_State *L)
 {
-    const ErisTypeInfo *typeinfo = to_eris_typeinfo (L, 1);
+    const EolTypeInfo *typeinfo = to_eol_typeinfo (L, 1);
     lua_Integer n_items = luaL_optinteger (L, 2, 1);
 
     if (n_items < 1)
@@ -542,27 +577,27 @@ l_eris_typeinfo_call (lua_State *L)
 
     bool typeinfo_owned = false;
     if (lua_gettop (L) > 1) {
-        typeinfo = eris_typeinfo_new_array (typeinfo, n_items);
+        typeinfo = eol_typeinfo_new_array (typeinfo, n_items);
         typeinfo_owned = true;
     }
 
-    size_t payload = eris_typeinfo_sizeof (typeinfo);
-    ErisVariable *ev = lua_newuserdata (L, sizeof (ErisVariable) + payload);
-    eris_symbol_init ((ErisSymbol*) ev, NULL, &ev[1], NULL);
+    size_t payload = eol_typeinfo_sizeof (typeinfo);
+    EolVariable *ev = lua_newuserdata (L, sizeof (EolVariable) + payload);
+    symbol_init ((EolSymbol*) ev, NULL, &ev[1], NULL);
     ev->typeinfo_owned = typeinfo_owned;
     ev->typeinfo_const = typeinfo;
     memset (ev->address, 0x00, payload);
-    luaL_setmetatable (L, ERIS_VARIABLE);
-    TRACE_PTR (>, ErisVariable, ev, " (<lua>)\n");
+    luaL_setmetatable (L, EOL_VARIABLE);
+    TRACE_PTR (>, EolVariable, ev, " (<lua>)\n");
     return 1;
 }
 
 
 static inline Dwarf_Off
-eris_library_get_die_ref_attribute_offset (ErisLibrary *library,
-                                           Dwarf_Die    d_die,
-                                           Dwarf_Half   d_attr_tag,
-                                           Dwarf_Error *d_error)
+library_get_die_ref_attribute_offset (EolLibrary *library,
+                                      Dwarf_Die    d_die,
+                                      Dwarf_Half   d_attr_tag,
+                                      Dwarf_Error *d_error)
 {
     CHECK_NOT_NULL (library);
     CHECK_NOT_NULL (d_die);
@@ -600,29 +635,29 @@ eris_library_get_die_ref_attribute_offset (ErisLibrary *library,
  *       DW_AT_name               b
  *       DW_AT_type               <die-ref-offset>
  */
-static ErisFunction*
-function_parameters (lua_State          *L,
-                     ErisLibrary        *library,
-                     Dwarf_Die           d_param_die,
-                     Dwarf_Error        *d_error,
-                     const ErisTypeInfo *return_typeinfo,
-                     void               *func_address,
-                     const char         *func_name,
-                     uint32_t            index)
+static EolFunction*
+function_parameters (lua_State         *L,
+                     EolLibrary        *library,
+                     Dwarf_Die          d_param_die,
+                     Dwarf_Error       *d_error,
+                     const EolTypeInfo *return_typeinfo,
+                     void              *func_address,
+                     const char        *func_name,
+                     uint32_t           index)
 {
     CHECK_NOT_NULL (library);
     CHECK_NOT_NULL (d_error);
     CHECK_NOT_NULL (return_typeinfo);
 
     if (!d_param_die) {
-        /* No more entries. Create a ErisFunction and fill-in the paramtype. */
-        const size_t payload = sizeof (ErisTypeInfo*) * index;
-        ErisFunction *ef = lua_newuserdata (L, sizeof (ErisFunction) + payload);
-        memset (ef, 0x00, sizeof (ErisFunction) + payload);
-        eris_symbol_init ((ErisSymbol*) ef, library, func_address, func_name);
+        /* No more entries. Create a EolFunction and fill-in the paramtype. */
+        const size_t payload = sizeof (EolTypeInfo*) * index;
+        EolFunction *ef = lua_newuserdata (L, sizeof (EolFunction) + payload);
+        memset (ef, 0x00, sizeof (EolFunction) + payload);
+        symbol_init ((EolSymbol*) ef, library, func_address, func_name);
         ef->return_typeinfo = return_typeinfo;
         ef->n_param         = index;
-        luaL_setmetatable (L, ERIS_FUNCTION);
+        luaL_setmetatable (L, EOL_FUNCTION);
         return ef;
     }
 
@@ -634,12 +669,12 @@ function_parameters (lua_State          *L,
         return NULL;
     }
 
-    const ErisTypeInfo *typeinfo = NULL;
+    const EolTypeInfo *typeinfo = NULL;
     if (d_tag == DW_TAG_formal_parameter) {
-        if (!(typeinfo = eris_library_fetch_die_type_ref_cached (library,
-                                                                 d_param_die,
-                                                                 DW_AT_type,
-                                                                 d_error))) {
+        if (!(typeinfo = library_fetch_die_type_ref_cached (library,
+                                                            d_param_die,
+                                                            DW_AT_type,
+                                                            d_error))) {
             DW_TRACE_DIE_ERROR ("%s[%d]: cannot get type information\n",
                                 library->d_debug, d_param_die, *d_error,
                                 func_name, index);
@@ -668,14 +703,14 @@ function_parameters (lua_State          *L,
         d_next_param_die = NULL;
     }
 
-    ErisFunction *ef = function_parameters (L,
-                                            library,
-                                            d_next_param_die,
-                                            d_error,
-                                            return_typeinfo,
-                                            func_address,
-                                            func_name,
-                                            typeinfo ? index + 1 : index);
+    EolFunction *ef = function_parameters (L,
+                                           library,
+                                           d_next_param_die,
+                                           d_error,
+                                           return_typeinfo,
+                                           func_address,
+                                           func_name,
+                                           typeinfo ? index + 1 : index);
     if (ef && typeinfo) ef->param_types[index] = typeinfo;
     dwarf_dealloc (library->d_debug, d_next_param_die, DW_DLA_DIE);
     return ef;
@@ -683,12 +718,12 @@ function_parameters (lua_State          *L,
 
 
 static int
-make_function_wrapper (lua_State   *L,
-                       ErisLibrary *library,
-                       void        *address,
-                       const char  *name,
-                       Dwarf_Die    d_die,
-                       Dwarf_Half   d_tag)
+make_function_wrapper (lua_State  *L,
+                       EolLibrary *library,
+                       void       *address,
+                       const char *name,
+                       Dwarf_Die   d_die,
+                       Dwarf_Half  d_tag)
 {
     Dwarf_Error d_error = DW_DLE_NE;
 
@@ -699,12 +734,12 @@ make_function_wrapper (lua_State   *L,
         return luaL_error (L, "%s: %s", name, dw_errmsg (d_error));
     }
 
-    const ErisTypeInfo *return_typeinfo = has_return
-            ? eris_library_fetch_die_type_ref_cached (library,
-                                                      d_die,
-                                                      DW_AT_type,
-                                                      &d_error)
-            : eris_typeinfo_void;
+    const EolTypeInfo *return_typeinfo = has_return
+            ? library_fetch_die_type_ref_cached (library,
+                                                 d_die,
+                                                 DW_AT_type,
+                                                 &d_error)
+            : eol_typeinfo_void;
     if (!return_typeinfo) {
         DW_TRACE_DIE_ERROR ("%s: cannot get return type\n",
                             library->d_debug, d_die, d_error, name);
@@ -726,88 +761,88 @@ make_function_wrapper (lua_State   *L,
         CHECK (child.die == NULL);
     }
 
-    ErisFunction *ef = function_parameters (L,
-                                            library,
-                                            child.die,
-                                            &d_error,
-                                            return_typeinfo,
-                                            address,
-                                            name,
-                                            0);
+    EolFunction *ef = function_parameters (L,
+                                           library,
+                                           child.die,
+                                           &d_error,
+                                           return_typeinfo,
+                                           address,
+                                           name,
+                                           0);
     if (!ef) {
         DW_TRACE_DIE_ERROR ("%s: cannot get parameter types\n",
                             library->d_debug, d_die, d_error, name);
         return luaL_error (L, "%s: cannot get parameter types (%s)",
                            name, dw_errmsg (d_error));
     }
-    ERIS_FUNCTION_FCALL_INIT (ef);
+    EOL_FUNCTION_FCALL_INIT (ef);
 
     TRACE (BGREEN "%s() " NORMAL, name);
-    TRACE_PTR (->, ErisFunction, ef, "\n");
+    TRACE_PTR (->, EolFunction, ef, "\n");
     return 1;
 }
 
 
-static ErisVariable*
-eris_variable_push_userdata (lua_State          *L,
-                             ErisLibrary        *library,
-                             const ErisTypeInfo *typeinfo,
-                             void               *address,
-                             const char         *name,
-                             bool                copy)
+static EolVariable*
+variable_push_userdata (lua_State         *L,
+                        EolLibrary        *library,
+                        const EolTypeInfo *typeinfo,
+                        void              *address,
+                        const char        *name,
+                        bool               copy)
 {
     CHECK_NOT_NULL (typeinfo);
     CHECK_NOT_NULL (address);
 
-    ErisVariable *ev;
+    EolVariable *ev;
     if (copy) {
-        const uint32_t size = eris_typeinfo_sizeof (typeinfo);
-        ev = lua_newuserdata (L, sizeof (ErisVariable) + size);
-        eris_symbol_init ((ErisSymbol*) ev, library, &ev[1], name);
+        const uint32_t size = eol_typeinfo_sizeof (typeinfo);
+        ev = lua_newuserdata (L, sizeof (EolVariable) + size);
+        symbol_init ((EolSymbol*) ev, library, &ev[1], name);
         memcpy (ev->address, address, size);
     } else {
-        ev = lua_newuserdata (L, sizeof (ErisVariable));
-        eris_symbol_init ((ErisSymbol*) ev, library, address, name);
+        ev = lua_newuserdata (L, sizeof (EolVariable));
+        symbol_init ((EolSymbol*) ev, library, address, name);
     }
     ev->typeinfo_const = typeinfo;
     ev->typeinfo_owned = false;
-    luaL_setmetatable (L, ERIS_VARIABLE);
+    luaL_setmetatable (L, EOL_VARIABLE);
 
-    TRACE_PTR (+, ErisVariable, ev, " type " GREEN "%p" NORMAL "(%s)\n",
+    TRACE_PTR (+, EolVariable, ev, " type " GREEN "%p" NORMAL "(%s)\n",
                typeinfo, name ? name : "?");
     return ev;
 }
 
 
 static int
-make_variable_wrapper (lua_State   *L,
-                       ErisLibrary *library,
-                       void        *address,
-                       const char  *name,
-                       Dwarf_Die    d_die,
-                       Dwarf_Half   d_tag)
+make_variable_wrapper (lua_State  *L,
+                       EolLibrary *library,
+                       void       *address,
+                       const char *name,
+                       Dwarf_Die   d_die,
+                       Dwarf_Half  d_tag)
 {
     Dwarf_Error d_error = DW_DLE_NE;
-    const ErisTypeInfo* typeinfo =
-            eris_library_fetch_die_type_ref_cached (library,
-                                                    d_die,
-                                                    DW_AT_type,
-                                                    &d_error);
+    const EolTypeInfo* typeinfo =
+            library_fetch_die_type_ref_cached (library,
+                                               d_die,
+                                               DW_AT_type,
+                                               &d_error);
     if (!typeinfo) {
         DW_TRACE_DIE_ERROR ("%s: cannot get type information\n",
                             library->d_debug, d_die, d_error, name);
         return luaL_error (L, "%s: could not obtain type information (%s)",
                            dw_errmsg (d_error));
     }
-    eris_variable_push_userdata (L, library, typeinfo, address, name, false);
+    variable_push_userdata (L, library, typeinfo, address, name, false);
     return 1;
 }
 
 
 static int
-eris_library_index (lua_State *L)
+library_index (lua_State *L)
 {
-    ErisLibrary *e = to_eris_library (L, 1);
+    EolLibrary *e = to_eol_library (L, 1);
     const char *name = luaL_checkstring (L, 2);
     const char *error = "unknown error";
 
@@ -826,7 +861,7 @@ eris_library_index (lua_State *L)
                            name, e, dw_errmsg (d_error));
     }
 
-#if ERIS_RUNTIME_CHECKS
+#if EOL_RUNTIME_CHECKS
     /*
      * Check that the variable/function is an exported global, i.e. it has
      * the DW_AT_external attribute. If the attribute is missing, assume
@@ -851,7 +886,7 @@ eris_library_index (lua_State *L)
         dwarf_dealloc (e->d_debug, d_attr, DW_DLA_ATTR);
     }
     CHECK (!symbol_is_private);
-#endif /* ERIS_RUNTIME_CHECKS */
+#endif /* EOL_RUNTIME_CHECKS */
 
     /* Obtain the DIE type tag. */
     Dwarf_Half d_tag;
@@ -889,128 +924,128 @@ return_error:
 }
 
 static int
-eris_library_eq (lua_State *L)
+library_eq (lua_State *L)
 {
-    ErisLibrary *el_self  = to_eris_library (L, 1);
-    ErisLibrary *el_other = to_eris_library (L, 2);
+    EolLibrary *el_self  = to_eol_library (L, 1);
+    EolLibrary *el_other = to_eol_library (L, 2);
     lua_pushboolean (L, el_self == el_other);
     return 1;
 }
 
 
-/* Methods for ErisLibrary userdatas. */
-static const luaL_Reg eris_library_methods[] = {
-    { "__gc",       eris_library_gc       },
-    { "__tostring", eris_library_tostring },
-    { "__index",    eris_library_index    },
-    { "__eq",       eris_library_eq       },
+/* Methods for EolLibrary userdatas. */
+static const luaL_Reg library_methods[] = {
+    { "__gc",       library_gc       },
+    { "__tostring", library_tostring },
+    { "__index",    library_index    },
+    { "__eq",       library_eq       },
     { NULL, NULL }
 };
 
 
-static int eris_function_call (lua_State *L);
+static int function_call (lua_State *L);
 
 
 static int
-eris_function_gc (lua_State *L)
+function_gc (lua_State *L)
 {
-    ErisFunction *ef = to_eris_function (L);
+    EolFunction *ef = to_eol_function (L);
 
-    TRACE_PTR (<, ErisFunction, ef, " (%s)\n", ef->name ? ef->name : "?");
+    TRACE_PTR (<, EolFunction, ef, " (%s)\n", ef->name ? ef->name : "?");
 
-    ERIS_FUNCTION_FCALL_FREE (ef);
-    eris_symbol_free ((ErisSymbol*) ef);
+    EOL_FUNCTION_FCALL_FREE (ef);
+    symbol_free ((EolSymbol*) ef);
     return 0;
 }
 
 static int
-eris_function_tostring (lua_State *L)
+function_tostring (lua_State *L)
 {
-    ErisFunction *ef = to_eris_function (L);
-    lua_pushfstring (L, "eris.function (%p:%s)", ef->library, ef->name);
+    EolFunction *ef = to_eol_function (L);
+    lua_pushfstring (L, "eol.function (%p:%s)", ef->library, ef->name);
     return 1;
 }
 
 static int
-eris_function_index (lua_State *L)
+function_index (lua_State *L)
 {
-    ErisFunction *ef = to_eris_function (L);
+    EolFunction *ef = to_eol_function (L);
     size_t length;
     const char *name = luaL_checklstring (L, 2, &length);
-    const ErisSpecial *s = (length > 2 && name[0] == '_' && name[1] == '_')
-        ? eris_special_lookup (name + 2, length - 2)
+    const EolSpecial *s = (length > 2 && name[0] == '_' && name[1] == '_')
+        ? eol_special_lookup (name + 2, length - 2)
         : NULL;
 
     if (!s) return luaL_error (L, "invalid field '%s'", name);
 
     switch (s->code) {
-        case ERIS_SPECIAL_NAME:
+        case EOL_SPECIAL_NAME:
             lua_pushstring (L, ef->name);
             break;
-        case ERIS_SPECIAL_TYPE:
-            eris_typeinfo_push_userdata (L, ef->return_typeinfo);
+        case EOL_SPECIAL_TYPE:
+            typeinfo_push_userdata (L, ef->return_typeinfo);
             break;
-        case ERIS_SPECIAL_LIBRARY:
-            eris_library_push_userdata (L, ef->library);
+        case EOL_SPECIAL_LIBRARY:
+            library_push_userdata (L, ef->library);
             break;
-        case ERIS_SPECIAL_VALUE:
+        case EOL_SPECIAL_VALUE:
             return luaL_error (L, "invalid field '%s'", name);
     }
     return 1;
 }
 
-/* Methods for ErisFunction userdatas. */
-static const luaL_Reg eris_function_methods[] = {
-    { "__call",     eris_function_call     },
-    { "__gc",       eris_function_gc       },
-    { "__tostring", eris_function_tostring },
-    { "__index",    eris_function_index    },
+/* Methods for EolFunction userdatas. */
+static const luaL_Reg function_methods[] = {
+    { "__call",     function_call     },
+    { "__gc",       function_gc       },
+    { "__tostring", function_tostring },
+    { "__index",    function_index    },
     { NULL, NULL }
 };
 
 
-/* Methods for ErisVariable userdatas. */
+/* Methods for EolVariable userdatas. */
 static int
-eris_variable_gc (lua_State *L)
+variable_gc (lua_State *L)
 {
-    ErisVariable *ev = to_eris_variable (L, 1);
+    EolVariable *ev = to_eol_variable (L, 1);
 
-    TRACE_PTR (<, ErisVariable, ev, " type " GREEN "%p" NORMAL " (%s)\n",
+    TRACE_PTR (<, EolVariable, ev, " type " GREEN "%p" NORMAL " (%s)\n",
                ev->typeinfo, ev->name ? ev->name : "?");
 
     if (ev->typeinfo_owned) {
-        eris_typeinfo_free (ev->typeinfo);
+        eol_typeinfo_free (ev->typeinfo);
     }
-    eris_symbol_free ((ErisSymbol*) ev);
+    symbol_free ((EolSymbol*) ev);
     return 0;
 }
 
 static int
-eris_variable_tostring (lua_State *L)
+variable_tostring (lua_State *L)
 {
-    ErisVariable *ev = to_eris_variable (L, 1);
+    EolVariable *ev = to_eol_variable (L, 1);
     if (ev->library && ev->name) {
         lua_pushfstring (L,
-                         "eris.variable<%s>(%p:%s)",
-                         eris_typeinfo_name (ev->typeinfo),
+                         "eol.variable<%s>(%p:%s)",
+                         eol_typeinfo_name (ev->typeinfo),
                          ev->library, ev->name);
     } else {
         lua_pushfstring (L,
-                         "eris.variable<%s>(%p)",
-                         eris_typeinfo_name (ev->typeinfo),
+                         "eol.variable<%s>(%p)",
+                         eol_typeinfo_name (ev->typeinfo),
                          ev->address);
     }
     return 1;
 }
 
 static int
-eris_variable_len (lua_State *L)
+variable_len (lua_State *L)
 {
-    ErisVariable *ev = to_eris_variable (L, 1);
-    const ErisTypeInfo *typeinfo =
-            eris_typeinfo_get_non_synthetic (ev->typeinfo);
-    lua_pushinteger (L, eris_typeinfo_is_array (typeinfo)
-                            ? eris_typeinfo_array_n_items (typeinfo) : 1);
+    EolVariable *ev = to_eol_variable (L, 1);
+    const EolTypeInfo *typeinfo =
+            eol_typeinfo_get_non_synthetic (ev->typeinfo);
+    lua_pushinteger (L, eol_typeinfo_is_array (typeinfo)
+                            ? eol_typeinfo_array_n_items (typeinfo) : 1);
     return 1;
 }
 
@@ -1032,27 +1067,27 @@ eris_variable_len (lua_State *L)
     ((ctype*) (((uintptr_t) base) + offset))
 
 #define FLOAT_TO_LUA(suffix, name, ctype) \
-        case ERIS_TYPE_ ## suffix:        \
+        case EOL_TYPE_ ## suffix:         \
             lua_pushnumber (L, *ADDR_OFF (ctype, address, 0)); return 1;
 
 #define INTEGER_TO_LUA(suffix, name, ctype) \
-        case ERIS_TYPE_ ## suffix:          \
+        case EOL_TYPE_ ## suffix:           \
             lua_pushinteger (L, *ADDR_OFF (ctype, address, 0)); return 1;
 
 static inline int
-cvalue_push (lua_State          *L,
-             const ErisTypeInfo *typeinfo,
-             void               *address,
-             bool                allocate)
+cvalue_push (lua_State         *L,
+             const EolTypeInfo *typeinfo,
+             void              *address,
+             bool               allocate)
 {
     CHECK_NOT_ZERO (address);
-    typeinfo = eris_typeinfo_get_non_synthetic (typeinfo);
-    switch (eris_typeinfo_type (typeinfo)) {
+    typeinfo = eol_typeinfo_get_non_synthetic (typeinfo);
+    switch (eol_typeinfo_type (typeinfo)) {
         INTEGER_TYPES (INTEGER_TO_LUA)
         FLOAT_TYPES (FLOAT_TO_LUA)
 
-        case ERIS_TYPE_ENUM:
-            switch (eris_typeinfo_sizeof (typeinfo)) {
+        case EOL_TYPE_ENUM:
+            switch (eol_typeinfo_sizeof (typeinfo)) {
                 case 1:
                     lua_pushinteger (L, *ADDR_OFF (int8_t, address, 0));
                     break;
@@ -1066,40 +1101,40 @@ cvalue_push (lua_State          *L,
                     lua_pushinteger (L, *ADDR_OFF (int64_t, address, 0));
                     break;
                 default:
-                    l_typeinfo_push_stringrep (L, typeinfo, false);
+                    typeinfo_push_stringrep (L, typeinfo, false);
                     return luaL_error (L, "size %d for type '%s' unsupported",
-                                       eris_typeinfo_sizeof (typeinfo),
+                                       eol_typeinfo_sizeof (typeinfo),
                                        lua_tostring (L, -1));
             }
             return 1;
 
-        case ERIS_TYPE_BOOL:
+        case EOL_TYPE_BOOL:
             lua_pushboolean (L, *ADDR_OFF (bool, address, 0));
             return 1;
 
-        case ERIS_TYPE_POINTER:
+        case EOL_TYPE_POINTER:
             if (*ADDR_OFF (void*, address, 0)) {
-                eris_variable_push_userdata (L, NULL, typeinfo,
-                                             *ADDR_OFF (void*, address, 0),
-                                             NULL, false);
+                variable_push_userdata (L, NULL, typeinfo,
+                                        *ADDR_OFF (void*, address, 0),
+                                        NULL, false);
             } else {
                 /* Map NULL pointers to "nil". */
                 lua_pushnil (L);
             }
             return 1;
 
-        case ERIS_TYPE_UNION:
-        case ERIS_TYPE_ARRAY:
-        case ERIS_TYPE_STRUCT:
-            eris_variable_push_userdata (L, NULL, typeinfo,
-                                         address, NULL, allocate);
+        case EOL_TYPE_UNION:
+        case EOL_TYPE_ARRAY:
+        case EOL_TYPE_STRUCT:
+            variable_push_userdata (L, NULL, typeinfo,
+                                    address, NULL, allocate);
             return 1;
 
-        case ERIS_TYPE_VOID:
+        case EOL_TYPE_VOID:
             return 0; /* Nothing to push. */
 
         default:
-            l_typeinfo_push_stringrep (L, typeinfo, true);
+            typeinfo_push_stringrep (L, typeinfo, true);
             return luaL_error (L, "unsupported type: %s", lua_tostring (L, -1));
     }
 }
@@ -1109,24 +1144,24 @@ cvalue_push (lua_State          *L,
 
 
 static inline int
-eris_variable_index_special (lua_State      *L,
-                             ErisVariable   *V,
-                             ErisSpecialCode code)
+variable_index_special (lua_State     *L,
+                        EolVariable   *V,
+                        EolSpecialCode code)
 {
     CHECK_NOT_NULL (L);
     CHECK_NOT_NULL (V);
 
     switch (code) {
-        case ERIS_SPECIAL_NAME:
+        case EOL_SPECIAL_NAME:
             lua_pushstring (L, V->name);
             break;
-        case ERIS_SPECIAL_TYPE:
-            eris_typeinfo_push_userdata (L, V->typeinfo);
+        case EOL_SPECIAL_TYPE:
+            typeinfo_push_userdata (L, V->typeinfo);
             break;
-        case ERIS_SPECIAL_VALUE:
+        case EOL_SPECIAL_VALUE:
             return cvalue_push (L, V->typeinfo, V->address, false);
-        case ERIS_SPECIAL_LIBRARY:
-            eris_library_push_userdata (L, V->library);
+        case EOL_SPECIAL_LIBRARY:
+            library_push_userdata (L, V->library);
             break;
     }
     return 1;
@@ -1134,48 +1169,48 @@ eris_variable_index_special (lua_State      *L,
 
 
 static int
-eris_variable_index (lua_State *L)
+variable_index (lua_State *L)
 {
-    ErisVariable *V = to_eris_variable (L, 1);
-    const ErisTypeInfo *T = eris_typeinfo_get_non_synthetic (V->typeinfo);
+    EolVariable *V = to_eol_variable (L, 1);
+    const EolTypeInfo *T = eol_typeinfo_get_non_synthetic (V->typeinfo);
     if (!T) return luaL_error (L, "cannot get actual type");
 
     const char *named_field = NULL;
     size_t named_field_length = 0;
     if (lua_type (L, 2) == LUA_TSTRING) {
         named_field = lua_tolstring (L, 2, &named_field_length);
-        const ErisSpecial *s = (named_field_length > 2 &&
-                                named_field[0] == '_' &&
-                                named_field[1] == '_')
-            ? eris_special_lookup (named_field + 2, named_field_length - 2)
+        const EolSpecial *s = (named_field_length > 2 &&
+                               named_field[0] == '_' &&
+                               named_field[1] == '_')
+            ? eol_special_lookup (named_field + 2, named_field_length - 2)
             : NULL;
-        if (s) return eris_variable_index_special (L, V, s->code);
+        if (s) return variable_index_special (L, V, s->code);
     }
 
-    switch (eris_typeinfo_type (T)) {
-        case ERIS_TYPE_ARRAY: {
-            L_BOUNDS_CHECK (index, 2, eris_typeinfo_array_n_items (T));
-            T = eris_typeinfo_get_non_synthetic (eris_typeinfo_base (T));
+    switch (eol_typeinfo_type (T)) {
+        case EOL_TYPE_ARRAY: {
+            L_BOUNDS_CHECK (index, 2, eol_typeinfo_array_n_items (T));
+            T = eol_typeinfo_get_non_synthetic (eol_typeinfo_base (T));
             return cvalue_push (L, T,
                                 ADDR_OFF (void, V->address,
-                                          index * eris_typeinfo_sizeof (T)),
+                                          index * eol_typeinfo_sizeof (T)),
                                 false);
         }
-        case ERIS_TYPE_UNION:
-        case ERIS_TYPE_STRUCT: {
-            const ErisTypeInfoMember *member = NULL;
+        case EOL_TYPE_UNION:
+        case EOL_TYPE_STRUCT: {
+            const EolTypeInfoMember *member = NULL;
             if (!named_field) {
-                L_BOUNDS_CHECK (index, 2, eris_typeinfo_compound_n_members (T));
-                member = eris_typeinfo_compound_const_member (T, index);
-            } else if (!(member = eris_typeinfo_compound_const_named_member (T, named_field))) {
-                l_typeinfo_push_stringrep (L, T, true);
+                L_BOUNDS_CHECK (index, 2, eol_typeinfo_compound_n_members (T));
+                member = eol_typeinfo_compound_const_member (T, index);
+            } else if (!(member = eol_typeinfo_compound_const_named_member (T, named_field))) {
+                typeinfo_push_stringrep (L, T, true);
                 return luaL_error (L, "%s: no such member in type '%s'",
                                    named_field, lua_tostring (L, -1));
             }
 
             CHECK_NOT_NULL (member);
             return cvalue_push (L, member->typeinfo,
-                                eris_typeinfo_is_struct (T)
+                                eol_typeinfo_is_struct (T)
                                     ? ADDR_OFF (void, V->address, member->offset)
                                     : V->address,
                                 false);
@@ -1187,17 +1222,17 @@ eris_variable_index (lua_State *L)
 
 
 static void
-l_typecheck (lua_State          *L,
-             int                 idx,
-             const ErisTypeInfo *dst,
-             const ErisTypeInfo *src)
+l_typecheck (lua_State         *L,
+             int                idx,
+             const EolTypeInfo *dst,
+             const EolTypeInfo *src)
 {
     CHECK_NOT_NULL (dst);
     CHECK_NOT_NULL (src);
 
-    if (!eris_typeinfo_equal (dst, src)) {
-        l_typeinfo_push_stringrep (L, dst, false);
-        l_typeinfo_push_stringrep (L, src, false);
+    if (!eol_typeinfo_equal (dst, src)) {
+        typeinfo_push_stringrep (L, dst, false);
+        typeinfo_push_stringrep (L, src, false);
         luaL_error (L, "#%d: expected value of type '%s', given '%s'",
                     (idx < 1) ? (lua_gettop (L) + idx) : idx,
                     lua_tostring (L, -2), lua_tostring (L, -1));
@@ -1206,56 +1241,58 @@ l_typecheck (lua_State          *L,
 
 
 #define FLOAT_FROM_LUA(suffix, name, ctype)           \
-        case ERIS_TYPE_ ## suffix:                    \
+        case EOL_TYPE_ ## suffix:                     \
             *ADDR_OFF (ctype, address, 0) =           \
                 (ctype) luaL_checknumber (L, lindex); \
             break;
 
 #define INTEGER_FROM_LUA(suffix, name, ctype)          \
-        case ERIS_TYPE_ ## suffix:                     \
+        case EOL_TYPE_ ## suffix:                      \
             *ADDR_OFF (ctype, address, 0) =            \
                 (ctype) luaL_checkinteger (L, lindex); \
             break;
 
 static inline int
-cvalue_get (lua_State          *L,
-            int                 lindex,
-            const ErisTypeInfo* typeinfo,
-            void               *address)
+cvalue_get (lua_State         *L,
+            int                lindex,
+            const EolTypeInfo* typeinfo,
+           void               *address)
 {
     CHECK_NOT_ZERO (address);
-    typeinfo = eris_typeinfo_get_non_synthetic (typeinfo);
-    switch (eris_typeinfo_type (typeinfo)) {
+    typeinfo = eol_typeinfo_get_non_synthetic (typeinfo);
+    switch (eol_typeinfo_type (typeinfo)) {
         INTEGER_TYPES (INTEGER_FROM_LUA)
         FLOAT_TYPES (FLOAT_FROM_LUA)
 
-        case ERIS_TYPE_BOOL:
+        case EOL_TYPE_BOOL:
             *ADDR_OFF (bool, address, 0) = lua_toboolean (L, lindex);
             break;
 
-        case ERIS_TYPE_POINTER:
-            if (eris_typeinfo_is_cstring (typeinfo) &&
+        case EOL_TYPE_POINTER:
+            if (eol_typeinfo_is_cstring (typeinfo) &&
                     lua_type (L, lindex) == LUA_TSTRING) {
                 *ADDR_OFF (const char*, address, 0) = lua_tostring (L, lindex);
             } else {
-                ErisVariable *ev = to_eris_variable (L, lindex);
-                l_typecheck (L, lindex - 1, typeinfo, ev->typeinfo);
+                EolVariable *ev = to_eol_variable (L, lindex);
+                l_typecheck (L, lindex - 1, typeinfo,
+                             eol_typeinfo_get_non_synthetic (ev->typeinfo));
                 *ADDR_OFF (void*, address, 0) = ev->address;
             }
             break;
 
-        case ERIS_TYPE_STRUCT: {
-            ErisVariable *ev = to_eris_variable (L, lindex);
-            l_typecheck (L, lindex - 1, typeinfo, ev->typeinfo);
-            CHECK_SIZE_EQ (eris_typeinfo_sizeof (typeinfo),
-                           eris_typeinfo_sizeof (ev->typeinfo));
+        case EOL_TYPE_STRUCT: {
+            EolVariable *ev = to_eol_variable (L, lindex);
+            l_typecheck (L, lindex - 1, typeinfo,
+                         eol_typeinfo_get_non_synthetic (ev->typeinfo));
+            CHECK_SIZE_EQ (eol_typeinfo_sizeof (typeinfo),
+                           eol_typeinfo_sizeof (ev->typeinfo));
             memcpy (ADDR_OFF (void, address, 0),
                     ADDR_OFF (void, ev->address, 0),
-                    eris_typeinfo_sizeof (typeinfo));
+                    eol_typeinfo_sizeof (typeinfo));
             break;
         }
         default:
-            l_typeinfo_push_stringrep (L, typeinfo, true);
+            typeinfo_push_stringrep (L, typeinfo, true);
             return luaL_error (L, "unsupported type: %s", lua_tostring (L, -1));
     }
 
@@ -1268,33 +1305,33 @@ cvalue_get (lua_State          *L,
 
 
 static inline int
-eris_variable_newindex_special (lua_State      *L,
-                                int             lindex,
-                                ErisVariable   *V,
-                                ErisSpecialCode code)
+variable_newindex_special (lua_State     *L,
+                           int            lindex,
+                           EolVariable   *V,
+                           EolSpecialCode code)
 {
     CHECK_NOT_NULL (L);
     CHECK_NOT_NULL (V);
 
     switch (code) {
-        case ERIS_SPECIAL_VALUE:
+        case EOL_SPECIAL_VALUE:
             return cvalue_get (L, lindex, V->typeinfo, V->address);
-        case ERIS_SPECIAL_NAME:
+        case EOL_SPECIAL_NAME:
             return luaL_error (L, "__name is read-only");
-        case ERIS_SPECIAL_TYPE:
+        case EOL_SPECIAL_TYPE:
             return luaL_error (L, "__type is read-only");
-        case ERIS_SPECIAL_LIBRARY:
+        case EOL_SPECIAL_LIBRARY:
             return luaL_error (L, "__library is read-only");
     }
 }
 
 
 static int
-eris_variable_newindex (lua_State *L)
+variable_newindex (lua_State *L)
 {
-    ErisVariable *V = to_eris_variable (L, 1);
+    EolVariable *V = to_eol_variable (L, 1);
 
-    if (eris_typeinfo_is_readonly (V->typeinfo)) {
+    if (eol_typeinfo_is_readonly (V->typeinfo)) {
         return luaL_error (L, "read-only variable (%p:%s)",
                            V->library, V->name);
     }
@@ -1302,31 +1339,31 @@ eris_variable_newindex (lua_State *L)
     if (lua_type (L, 2) == LUA_TSTRING) {
         size_t length;
         const char *name = lua_tolstring (L, 2, &length);
-        const ErisSpecial *s = (length > 2 && name[0] == '_' && name[1] == '_')
-            ? eris_special_lookup (name + 2, length - 2)
+        const EolSpecial *s = (length > 2 && name[0] == '_' && name[1] == '_')
+            ? eol_special_lookup (name + 2, length - 2)
             : NULL;
-        if (s) return eris_variable_newindex_special (L, 3, V, s->code);
+        if (s) return variable_newindex_special (L, 3, V, s->code);
     }
 
-    const ErisTypeInfo *T = eris_typeinfo_get_non_synthetic (V->typeinfo);
+    const EolTypeInfo *T = eol_typeinfo_get_non_synthetic (V->typeinfo);
     if (!T) return luaL_error (L, "cannot get actual type");
 
-    switch (eris_typeinfo_type (T)) {
-        case ERIS_TYPE_ARRAY: {
-            L_BOUNDS_CHECK (index, 2, eris_typeinfo_array_n_items (T));
-            T = eris_typeinfo_get_non_synthetic (eris_typeinfo_base (T));
+    switch (eol_typeinfo_type (T)) {
+        case EOL_TYPE_ARRAY: {
+            L_BOUNDS_CHECK (index, 2, eol_typeinfo_array_n_items (T));
+            T = eol_typeinfo_get_non_synthetic (eol_typeinfo_base (T));
             return cvalue_get (L, 3, T,
                                ADDR_OFF (void, V->address,
-                                         index * eris_typeinfo_sizeof (T)));
+                                         index * eol_typeinfo_sizeof (T)));
         }
-        case ERIS_TYPE_STRUCT: {
-            const ErisTypeInfoMember *member;
+        case EOL_TYPE_STRUCT: {
+            const EolTypeInfoMember *member;
             if (lua_isinteger (L, 2)) {
-                L_BOUNDS_CHECK (index, 2, eris_typeinfo_compound_n_members (T));
-                member = eris_typeinfo_compound_const_member (T, index);
+                L_BOUNDS_CHECK (index, 2, eol_typeinfo_compound_n_members (T));
+                member = eol_typeinfo_compound_const_member (T, index);
             } else {
                 const char *name = luaL_checkstring (L, 2);
-                member = eris_typeinfo_compound_const_named_member (T, name);
+                member = eol_typeinfo_compound_const_named_member (T, name);
                 if (!member) {
                     return luaL_error (L, "%s: no such struct member", name);
                 }
@@ -1342,12 +1379,12 @@ eris_variable_newindex (lua_State *L)
 }
 
 
-static const luaL_Reg eris_variable_methods[] = {
-    { "__gc",       eris_variable_gc       },
-    { "__tostring", eris_variable_tostring },
-    { "__len",      eris_variable_len      },
-    { "__index",    eris_variable_index    },
-    { "__newindex", eris_variable_newindex },
+static const luaL_Reg variable_methods[] = {
+    { "__gc",       variable_gc       },
+    { "__tostring", variable_tostring },
+    { "__len",      variable_len      },
+    { "__index",    variable_index    },
+    { "__newindex", variable_newindex },
     { NULL, NULL },
 };
 
@@ -1355,34 +1392,34 @@ static const luaL_Reg eris_variable_methods[] = {
 static void
 create_meta (lua_State *L)
 {
-    /* ErisLibrary */
-    luaL_newmetatable (L, ERIS_LIBRARY);
+    /* EolLibrary */
+    luaL_newmetatable (L, EOL_LIBRARY);
     lua_pushvalue (L, -1);           /* Push metatable */
     lua_setfield (L, -2, "__index"); /* metatable.__index == metatable */
-    luaL_setfuncs (L, eris_library_methods, 0);
+    luaL_setfuncs (L, library_methods, 0);
     lua_pop (L, 1);
 
-    /* ErisFunction */
-    luaL_newmetatable (L, ERIS_FUNCTION);
+    /* EolFunction */
+    luaL_newmetatable (L, EOL_FUNCTION);
     lua_pushvalue (L, -1);           /* Push metatable */
     lua_setfield (L, -2, "__index"); /* metatable.__index == metatable */
-    luaL_setfuncs (L, eris_function_methods, 0);
+    luaL_setfuncs (L, function_methods, 0);
     lua_pop (L, 1);
 
-    /* ErisVariable */
-    luaL_newmetatable (L, ERIS_VARIABLE);
-    luaL_setfuncs (L, eris_variable_methods, 0);
+    /* EolVariable */
+    luaL_newmetatable (L, EOL_VARIABLE);
+    luaL_setfuncs (L, variable_methods, 0);
     lua_pop (L, 1);
 
-    /* ErisTypeInfo */
-    luaL_newmetatable (L, ERIS_TYPEINFO);
-    luaL_setfuncs (L, eris_typeinfo_methods, 0);
+    /* EolypeInfo */
+    luaL_newmetatable (L, EOL_TYPEINFO);
+    luaL_setfuncs (L, typeinfo_methods, 0);
     lua_pop (L, 1);
 }
 
 
 static int
-eris_load (lua_State *L)
+eol_load (lua_State *L)
 {
     size_t name_length;
     const char *name = luaL_checklstring (L, 1, &name_length);
@@ -1409,11 +1446,11 @@ eris_load (lua_State *L)
      * If the library at the resolved path has been already loaded, return
      * a reference to the existing one instead of opening it multiple times.
      */
-    ErisLibrary *library = NULL;
+    EolLibrary *library = NULL;
     for (library = library_list; library; library = library->next) {
         if (string_equal (path, library->path)) {
-            TRACE_PTR (+, ErisLibrary, library, " [%s]\n", library->path);
-            eris_library_push_userdata (L, library);
+            TRACE_PTR (+, EolLibrary, library, " [%s]\n", library->path);
+            library_push_userdata (L, library);
             return 1;
         }
     }
@@ -1462,7 +1499,7 @@ eris_load (lua_State *L)
     }
     TRACE ("found %ld globals\n", (long) d_num_globals);
 
-#if ERIS_TRACE > 1
+#if EOL_TRACE > 1
     for (Dwarf_Signed i = 0; i < d_num_globals; i++) {
         char *name = NULL;
         Dwarf_Error d_name_error = DW_DLE_NE;
@@ -1473,7 +1510,7 @@ eris_load (lua_State *L)
             TRACE (">  [%li] ERROR: %s\n", (long) i, dw_errmsg (d_name_error));
         }
     }
-#endif /* ERIS_TRACE */
+#endif /* EOL_TRACE */
 
     Dwarf_Signed d_num_types = 0;
     Dwarf_Type *d_types = NULL;
@@ -1490,7 +1527,7 @@ eris_load (lua_State *L)
     }
     TRACE ("found %ld types\n", (long) d_num_types);
 
-#if ERIS_TRACE > 1
+#if EOL_TRACE > 1
     for (Dwarf_Signed i = 0; i < d_num_types; i++) {
         char *name = NULL;
         Dwarf_Error d_name_error = DW_DLE_NE;
@@ -1501,9 +1538,9 @@ eris_load (lua_State *L)
             TRACE (">  [%li] ERROR: %s\n", (long) i, dw_errmsg (d_name_error));
         }
     }
-#endif /* ERIS_TRACE */
+#endif /* EOL_TRACE */
 
-    ErisLibrary *el = calloc (1, sizeof (ErisLibrary));
+    EolLibrary *el = calloc (1, sizeof (EolLibrary));
     el->fd = fd;
     el->dl = dl;
     el->path = strdup (path);
@@ -1514,81 +1551,96 @@ eris_load (lua_State *L)
     el->d_num_types = d_num_types;
     el->next = library_list;
     library_list = el;
-    eris_type_cache_init (&el->type_cache);
-    eris_library_push_userdata (L, el);
+    eol_type_cache_init (&el->type_cache);
+    library_push_userdata (L, el);
 
-    TRACE_PTR (>, ErisLibrary, el, " [%s]\n", el->path);
+    TRACE_PTR (>, EolLibrary, el, " [%s]\n", el->path);
 
     return 1;
 }
 
 
 static int
-eris_type (lua_State *L)
+eol_type (lua_State *L)
 {
-    ErisLibrary *el = to_eris_library (L, 1);
+    EolLibrary *el = to_eol_library (L, 1);
     const char *name = luaL_checkstring (L, 2);
 
     Dwarf_Error d_error = DW_DLE_NE;
-    Dwarf_Off d_offset = eris_library_get_tue_offset (el, name, &d_error);
+    Dwarf_Off d_offset = library_get_tue_offset (el, name, &d_error);
     if (d_offset == DW_DLV_BADOFFSET) {
         return luaL_error (L, "%s: could not look up DWARF TUE offset "
                            "(library: %p; %s)", name, el, dw_errmsg (d_error));
     }
 
-    const ErisTypeInfo *typeinfo =
-            eris_library_lookup_type (el, d_offset, &d_error);
+    const EolTypeInfo *typeinfo = library_lookup_type (el, d_offset, &d_error);
     if (!typeinfo) {
         return luaL_error (L, "%s: no type info (%s)",
                            name, dw_errmsg (d_error));
     }
-    eris_typeinfo_push_userdata (L, typeinfo);
+    typeinfo_push_userdata (L, typeinfo);
     return 1;
 }
 
 
 /*
- * Usage: eris.sizeof(ct [, nelem])
+ * Usage: eol.sizeof(ct [, nelem])
  *
  * TODO: Handle second "nelem" parameter for VLAs.
  */
 static int
-eris_sizeof (lua_State *L)
+eol_sizeof (lua_State *L)
 {
-    const ErisTypeInfo *typeinfo = NULL;
+    const EolTypeInfo *typeinfo = NULL;
 
-    ErisVariable *ev;
-    if ((ev = luaL_testudata (L, 1, ERIS_VARIABLE))) {
+    EolVariable *ev;
+    if ((ev = luaL_testudata (L, 1, EOL_VARIABLE))) {
         typeinfo = ev->typeinfo;
     } else {
-        typeinfo = to_eris_typeinfo (L, 1);
+        typeinfo = to_eol_typeinfo (L, 1);
     }
 
     CHECK_NOT_NULL (typeinfo);
-    lua_pushinteger (L, eris_typeinfo_sizeof (typeinfo));
+    lua_pushinteger (L, eol_typeinfo_sizeof (typeinfo));
+    return 1;
+}
+
+
+static int
+eol_cast (lua_State *L)
+{
+    const EolTypeInfo *typeinfo = to_eol_typeinfo (L, 1);
+    EolVariable *ev = to_eol_variable (L, 2);
+
+    variable_push_userdata (L,
+                            ev->library,
+                            typeinfo,
+                            ev->address,
+                            ev->name,
+                            false);
+
     return 1;
 }
 
 
 /*
- * Usage: typeinfo = eris.typeof(ct)
+ * Usage: typeinfo = eol.typeof(ct)
  */
 static int
-eris_typeof (lua_State *L)
+eol_typeof (lua_State *L)
 {
-    if (luaL_testudata (L, 1, ERIS_TYPEINFO)) {
+    if (luaL_testudata (L, 1, EOL_TYPEINFO)) {
         lua_settop (L, 1);
     } else {
-        ErisVariable *ev = luaL_testudata (L, 1, ERIS_VARIABLE);
+        EolVariable *ev = luaL_testudata (L, 1, EOL_VARIABLE);
         if (ev) {
-            eris_typeinfo_push_userdata (L, ev->typeinfo);
+            typeinfo_push_userdata (L, ev->typeinfo);
         } else {
             const char *name = luaL_checkstring (L, 1);
-            for (ErisLibrary *el = library_list; el; el = el->next) {
+            for (EolLibrary *el = library_list; el; el = el->next) {
                 Dwarf_Error d_error = DW_DLE_NE;
-                Dwarf_Off d_offset = eris_library_get_tue_offset (el,
-                                                                  name,
-                                                                  &d_error);
+                Dwarf_Off d_offset =
+                        library_get_tue_offset (el, name, &d_error);
                 if (d_offset == DW_DLV_BADOFFSET) {
                     if (d_error != DW_DLE_NE) {
                         return luaL_error (L, "%s: could not lookup DWARF TUE "
@@ -1598,13 +1650,13 @@ eris_typeof (lua_State *L)
                     continue;
                 }
 
-                const ErisTypeInfo *typeinfo =
-                        eris_library_lookup_type (el, d_offset, &d_error);
+                const EolTypeInfo *typeinfo =
+                        library_lookup_type (el, d_offset, &d_error);
                 if (!typeinfo) {
                     return luaL_error (L, "%s: no type info (library: %p; %s)",
                                        name, el, dw_errmsg (d_error));
                 }
-                eris_typeinfo_push_userdata (L, typeinfo);
+                typeinfo_push_userdata (L, typeinfo);
                 return 1;
             }
             lua_pushnil (L);
@@ -1615,31 +1667,31 @@ eris_typeof (lua_State *L)
 
 
 /*
- * Usage: offset [, bpos, bsize] = eris.offsetof(ct, field)
+ * Usage: offset [, bpos, bsize] = eol.offsetof(ct, field)
  *
  * TODO: Implement returning "bpos" and "bsize" for bit fields.
  */
 static int
-eris_offsetof (lua_State *L)
+eol_offsetof (lua_State *L)
 {
-    const ErisTypeInfo *typeinfo = NULL;
+    const EolTypeInfo *typeinfo = NULL;
 
-    ErisVariable *ev;
-    if ((ev = luaL_testudata (L, 1, ERIS_VARIABLE))) {
+    EolVariable *ev;
+    if ((ev = luaL_testudata (L, 1, EOL_VARIABLE))) {
         typeinfo = ev->typeinfo;
     } else {
-        typeinfo = to_eris_typeinfo (L, 1);
+        typeinfo = to_eol_typeinfo (L, 1);
     }
 
     CHECK_NOT_NULL (typeinfo);
 
-    if (!(typeinfo = eris_typeinfo_get_compound (typeinfo))) {
+    if (!(typeinfo = eol_typeinfo_get_compound (typeinfo))) {
         return luaL_error (L, "parameter #1 is not a struct or union");
     }
 
-    const ErisTypeInfoMember *member;
+    const EolTypeInfoMember *member;
     if (lua_isinteger (L, 2)) {
-        uint32_t n_members = eris_typeinfo_compound_n_members (typeinfo);
+        uint32_t n_members = eol_typeinfo_compound_n_members (typeinfo);
         lua_Integer index = luaL_checkinteger (L, 2);
         if (index < 0) index += n_members;
         if (index <= 0 || index > n_members) {
@@ -1647,12 +1699,12 @@ eris_offsetof (lua_State *L)
                                "(effective=%d, length=%d)",
                                luaL_checkinteger (L, 2), index, n_members);
         }
-        member = eris_typeinfo_compound_const_member (typeinfo, index - 1);
+        member = eol_typeinfo_compound_const_member (typeinfo, index - 1);
     } else {
         const char *name = luaL_checkstring (L, 2);
-        member = eris_typeinfo_compound_const_named_member (typeinfo, name);
+        member = eol_typeinfo_compound_const_named_member (typeinfo, name);
         if (!member) {
-            const char *typename = eris_typeinfo_name (typeinfo);
+            const char *typename = eol_typeinfo_name (typeinfo);
             return luaL_error (L, "%s.%s: no such member field",
                                typename ? typename : "<struct>", name);
         }
@@ -1664,33 +1716,34 @@ eris_offsetof (lua_State *L)
 }
 
 
-static const luaL_Reg erislib[] = {
-    { "load",     eris_load     },
-    { "type",     eris_type     },
-    { "sizeof",   eris_sizeof   },
-    { "typeof",   eris_typeof   },
-    { "offsetof", eris_offsetof },
+static const luaL_Reg eollib[] = {
+    { "load",     eol_load     },
+    { "type",     eol_type     },
+    { "sizeof",   eol_sizeof   },
+    { "typeof",   eol_typeof   },
+    { "offsetof", eol_offsetof },
+    { "cast",     eol_cast     },
     { NULL, NULL },
 };
 
 
 LUAMOD_API int
-luaopen_eris (lua_State *L)
+luaopen_eol (lua_State *L)
 {
-    eris_trace_setup ();
+    eol_trace_setup ();
 
     (void) elf_version (EV_NONE);
     if (elf_version (EV_CURRENT) == EV_NONE)
         return luaL_error (L, "outdated libelf version");
 
-    luaL_newlib (L, erislib);
+    luaL_newlib (L, eollib);
     create_meta (L);
     return 1;
 }
 
 
 static Dwarf_Die
-lookup_die (ErisLibrary *el,
+lookup_die (EolLibrary  *el,
             const char  *name,
             Dwarf_Error *d_error)
 {
@@ -1741,9 +1794,9 @@ lookup_die (ErisLibrary *el,
 
 
 static Dwarf_Die
-eris_library_fetch_die (ErisLibrary *library,
-                        Dwarf_Off    d_offset,
-                        Dwarf_Error *d_error)
+library_fetch_die (EolLibrary *library,
+                   Dwarf_Off    d_offset,
+                   Dwarf_Error *d_error)
 {
     CHECK_NOT_NULL (library);
     CHECK_SIZE_NE (DW_DLV_BADOFFSET, d_offset);
@@ -1765,30 +1818,30 @@ eris_library_fetch_die (ErisLibrary *library,
 }
 
 
-static const ErisTypeInfo*
-eris_library_lookup_type (ErisLibrary *library,
-                          Dwarf_Off    d_offset,
-                          Dwarf_Error *d_error)
+static const EolTypeInfo*
+library_lookup_type (EolLibrary  *library,
+                     Dwarf_Off    d_offset,
+                     Dwarf_Error *d_error)
 {
     CHECK_NOT_NULL (library);
     CHECK_SIZE_NE (DW_DLV_BADOFFSET, d_offset);
     CHECK_NOT_NULL (d_error);
 
-    const ErisTypeInfo *typeinfo =
-            eris_type_cache_lookup (&library->type_cache, d_offset);
+    const EolTypeInfo *typeinfo =
+            eol_type_cache_lookup (&library->type_cache, d_offset);
     if (!typeinfo) {
-        typeinfo = eris_library_build_typeinfo (library, d_offset, d_error);
+        typeinfo = library_build_typeinfo (library, d_offset, d_error);
         CHECK_NOT_NULL (typeinfo);
-        eris_type_cache_add (&library->type_cache, d_offset, typeinfo);
+        eol_type_cache_add (&library->type_cache, d_offset, typeinfo);
     }
     return typeinfo;
 }
 
 
-static const ErisTypeInfo*
-eris_library_build_base_type_typeinfo (ErisLibrary *library,
-                                       Dwarf_Die    d_type_die,
-                                       Dwarf_Error *d_error)
+static const EolTypeInfo*
+library_build_base_type_typeinfo (EolLibrary  *library,
+                                  Dwarf_Die    d_type_die,
+                                  Dwarf_Error *d_error)
 {
     CHECK_NOT_NULL (library);
     CHECK_NOT_NULL (d_type_die);
@@ -1810,11 +1863,11 @@ eris_library_build_base_type_typeinfo (ErisLibrary *library,
 
 #define TYPEINFO_ITEM(_, name, ctype) \
         case sizeof (ctype):          \
-            return eris_typeinfo_ ## name;
+            return eol_typeinfo_ ## name;
 
     switch (d_encoding) {
         case DW_ATE_boolean:
-            return eris_typeinfo_bool;
+            return eol_typeinfo_bool;
         case DW_ATE_float:
             switch (d_byte_size) { FLOAT_TYPES (TYPEINFO_ITEM) }
             break;
@@ -1834,20 +1887,19 @@ eris_library_build_base_type_typeinfo (ErisLibrary *library,
 }
 
 
-static const ErisTypeInfo*
-eris_library_build_typedef_typeinfo (ErisLibrary *library,
-                                     Dwarf_Die    d_type_die,
-                                     Dwarf_Error *d_error)
+static const EolTypeInfo*
+library_build_typedef_typeinfo (EolLibrary  *library,
+                                Dwarf_Die    d_type_die,
+                                Dwarf_Error *d_error)
 {
     CHECK_NOT_NULL (library);
     CHECK_NOT_NULL (d_type_die);
     CHECK_NOT_NULL (d_error);
 
-    const ErisTypeInfo *base =
-            eris_library_fetch_die_type_ref_cached (library,
-                                                    d_type_die,
-                                                    DW_AT_type,
-                                                    d_error);
+    const EolTypeInfo *base = library_fetch_die_type_ref_cached (library,
+                                                                 d_type_die,
+                                                                 DW_AT_type,
+                                                                 d_error);
     if (!base) {
         DW_TRACE_DIE_ERROR ("cannot get type info\n",
                             library->d_debug, d_type_die, *d_error);
@@ -1864,40 +1916,39 @@ eris_library_build_typedef_typeinfo (ErisLibrary *library,
         return NULL;
     }
 
-    return eris_typeinfo_new_typedef (base, name.string);
+    return eol_typeinfo_new_typedef (base, name.string);
 }
 
 
-static inline const ErisTypeInfo*
-eris_library_fetch_die_type_ref_cached (ErisLibrary *library,
-                                        Dwarf_Die    d_die,
-                                        Dwarf_Half   d_tag,
-                                        Dwarf_Error *d_error)
+static inline const EolTypeInfo*
+library_fetch_die_type_ref_cached (EolLibrary  *library,
+                                   Dwarf_Die    d_die,
+                                   Dwarf_Half   d_tag,
+                                   Dwarf_Error *d_error)
 {
     CHECK_NOT_NULL (library);
     CHECK_NOT_NULL (d_die);
     CHECK_NOT_NULL (d_error);
 
-    Dwarf_Off d_offset =
-            eris_library_get_die_ref_attribute_offset (library,
-                                                       d_die,
-                                                       d_tag,
-                                                       d_error);
+    Dwarf_Off d_offset = library_get_die_ref_attribute_offset (library,
+                                                               d_die,
+                                                               d_tag,
+                                                               d_error);
     if (d_offset == DW_DLV_BADOFFSET) {
         DW_TRACE_DIE_ERROR ("cannot get attribute offset\n",
                             library->d_debug, d_die, *d_error);
         return NULL;
     }
 
-    return eris_library_lookup_type (library, d_offset, d_error);
+    return library_lookup_type (library, d_offset, d_error);
 }
 
 
 
-static const ErisTypeInfo*
-eris_library_build_pointer_type_typeinfo (ErisLibrary *library,
-                                          Dwarf_Die    d_type_die,
-                                          Dwarf_Error *d_error)
+static const EolTypeInfo*
+library_build_pointer_type_typeinfo (EolLibrary  *library,
+                                     Dwarf_Die    d_type_die,
+                                     Dwarf_Error *d_error)
 {
     CHECK_NOT_NULL (library);
     CHECK_NOT_NULL (d_type_die);
@@ -1911,26 +1962,25 @@ eris_library_build_pointer_type_typeinfo (ErisLibrary *library,
     }
 
     if (!has_type)
-        return eris_typeinfo_pointer;
+        return eol_typeinfo_pointer;
 
-    const ErisTypeInfo *base =
-            eris_library_fetch_die_type_ref_cached (library,
-                                                    d_type_die,
-                                                    DW_AT_type,
-                                                    d_error);
+    const EolTypeInfo *base = library_fetch_die_type_ref_cached (library,
+                                                                 d_type_die,
+                                                                 DW_AT_type,
+                                                                 d_error);
     if (!base) {
         DW_TRACE_DIE_ERROR ("cannot get typeinfo\n",
                             library->d_debug, d_type_die, *d_error);
         return NULL;
     }
-    return eris_typeinfo_new_pointer (base);
+    return eol_typeinfo_new_pointer (base);
 }
 
 
-static const ErisTypeInfo*
-eris_library_build_array_type_typeinfo (ErisLibrary *library,
-                                        Dwarf_Die    d_type_die,
-                                        Dwarf_Error *d_error)
+static const EolTypeInfo*
+library_build_array_type_typeinfo (EolLibrary  *library,
+                                   Dwarf_Die    d_type_die,
+                                   Dwarf_Error *d_error)
 {
     CHECK_NOT_NULL (library);
     CHECK_NOT_NULL (d_type_die);
@@ -1946,42 +1996,40 @@ eris_library_build_array_type_typeinfo (ErisLibrary *library,
         return NULL;
     }
 
-    const ErisTypeInfo *base =
-            eris_library_fetch_die_type_ref_cached (library,
-                                                    d_type_die,
-                                                    DW_AT_type,
-                                                    d_error);
+    const EolTypeInfo *base = library_fetch_die_type_ref_cached (library,
+                                                                 d_type_die,
+                                                                 DW_AT_type,
+                                                                 d_error);
     if (!base) {
         DW_TRACE_DIE_ERROR ("cannot get TUE\n",
                             library->d_debug, d_type_die, *d_error);
         return NULL;
     }
 
-    return eris_typeinfo_new_array (base, (uint64_t) n_items);
+    return eol_typeinfo_new_array (base, (uint64_t) n_items);
 }
 
 
-static const ErisTypeInfo*
-eris_library_build_const_type_typeinfo (ErisLibrary *library,
-                                        Dwarf_Die    d_type_die,
-                                        Dwarf_Error *d_error)
+static const EolTypeInfo*
+library_build_const_type_typeinfo (EolLibrary  *library,
+                                   Dwarf_Die    d_type_die,
+                                   Dwarf_Error *d_error)
 {
     CHECK_NOT_NULL (library);
     CHECK_NOT_NULL (d_type_die);
     CHECK_NOT_NULL (d_error);
 
-    const ErisTypeInfo *base =
-            eris_library_fetch_die_type_ref_cached (library,
-                                                    d_type_die,
-                                                    DW_AT_type,
-                                                    d_error);
+    const EolTypeInfo *base = library_fetch_die_type_ref_cached (library,
+                                                                 d_type_die,
+                                                                 DW_AT_type,
+                                                                 d_error);
     if (!base) {
         DW_TRACE_DIE_ERROR ("cannot get base type\n",
                             library->d_debug, d_type_die, *d_error);
         return NULL;
     }
 
-    return eris_typeinfo_new_const (base);
+    return eol_typeinfo_new_const (base);
 }
 
 
@@ -2007,12 +2055,12 @@ eris_library_build_const_type_typeinfo (ErisLibrary *library,
  *         DW_AT_data_member_location  <in-struct-offset>
  */
 
-typedef ErisTypeInfo* (*NewCompoundCb) (const char* name,
-                                        uint32_t    size,
-                                        uint32_t    n_members);
+typedef EolTypeInfo* (*NewCompoundCb) (const char* name,
+                                       uint32_t    size,
+                                       uint32_t    n_members);
 
-static ErisTypeInfo*
-compound_type_members (ErisLibrary  *library,
+static EolTypeInfo*
+compound_type_members (EolLibrary   *library,
                        Dwarf_Die     d_member_die,
                        Dwarf_Error  *d_error,
                        NewCompoundCb compound_new,
@@ -2040,7 +2088,7 @@ compound_type_members (ErisLibrary  *library,
 
     dw_lstring_t member_name       = { library->d_debug };
     Dwarf_Unsigned d_member_offset = DW_DLV_BADOFFSET;
-    const ErisTypeInfo *typeinfo   = NULL;
+    const EolTypeInfo *typeinfo    = NULL;
 
     if (d_tag == DW_TAG_member) {
         if (!dw_die_get_uint_attr (library->d_debug,
@@ -2054,10 +2102,10 @@ compound_type_members (ErisLibrary  *library,
             return NULL;
         }
 
-        if (!(typeinfo = eris_library_fetch_die_type_ref_cached (library,
-                                                                 d_member_die,
-                                                                 DW_AT_type,
-                                                                 d_error))) {
+        if (!(typeinfo = library_fetch_die_type_ref_cached (library,
+                                                            d_member_die,
+                                                            DW_AT_type,
+                                                            d_error))) {
             DW_TRACE_DIE_ERROR ("%s: cannot get type information\n",
                                 library->d_debug, d_member_die, *d_error,
                                 compound_name ? compound_name : "@");
@@ -2092,16 +2140,15 @@ compound_type_members (ErisLibrary  *library,
         CHECK (next_member.die == NULL);
     }
 
-    ErisTypeInfo *result = compound_type_members (library,
-                                                  next_member.die,
-                                                  d_error,
-                                                  compound_new,
-                                                  compound_name,
-                                                  compound_size,
-                                                  typeinfo ? index + 1 : index);
+    EolTypeInfo *result = compound_type_members (library,
+                                                 next_member.die,
+                                                 d_error,
+                                                 compound_new,
+                                                 compound_name,
+                                                 compound_size,
+                                                 typeinfo ? index + 1 : index);
     if (result && typeinfo) {
-        ErisTypeInfoMember *member = eris_typeinfo_compound_member (result,
-                                                                    index);
+        EolTypeInfoMember *member = eol_typeinfo_compound_member (result, index);
         member->name     = member_name.string ? strdup (member_name.string) : NULL;
         member->offset   = (uint32_t) d_member_offset;
         member->typeinfo = typeinfo;
@@ -2110,10 +2157,10 @@ compound_type_members (ErisLibrary  *library,
 }
 
 
-static const ErisTypeInfo*
-eris_library_build_union_type_typeinfo (ErisLibrary *library,
-                                        Dwarf_Die    d_type_die,
-                                        Dwarf_Error *d_error)
+static const EolTypeInfo*
+library_build_union_type_typeinfo (EolLibrary  *library,
+                                   Dwarf_Die    d_type_die,
+                                   Dwarf_Error *d_error)
 {
     CHECK_NOT_NULL (library);
     CHECK_NOT_NULL (d_type_die);
@@ -2151,7 +2198,7 @@ eris_library_build_union_type_typeinfo (ErisLibrary *library,
     return compound_type_members (library,
                                   child.die,
                                   d_error,
-                                  eris_typeinfo_new_union,
+                                  eol_typeinfo_new_union,
                                   name.string,
                                   d_byte_size,
                                   0);
@@ -2178,7 +2225,7 @@ eris_library_build_union_type_typeinfo (ErisLibrary *library,
  *       DW_AT_name         FOO_BAR
  *       DW_AT_const_value  1
  */
-static ErisTypeInfo*
+static EolTypeInfo*
 enum_members (Dwarf_Debug  d_debug,
               Dwarf_Die    d_member_die,
               Dwarf_Error *d_error,
@@ -2191,7 +2238,7 @@ enum_members (Dwarf_Debug  d_debug,
 
     if (!d_member_die) {
         /* No more entries: create type information. */
-        return eris_typeinfo_new_enum (enum_name, enum_size, index);
+        return eol_typeinfo_new_enum (enum_name, enum_size, index);
     }
 
     DW_TRACE_DIE ("\n", d_debug, d_member_die);
@@ -2246,7 +2293,7 @@ enum_members (Dwarf_Debug  d_debug,
             CHECK_UNREACHABLE ();
     }
 
-    ErisTypeInfo *result =
+    EolTypeInfo *result =
             enum_members (d_debug,
                           next_member.die,
                           d_error,
@@ -2255,8 +2302,8 @@ enum_members (Dwarf_Debug  d_debug,
                           member_name.string ? index + 1 : index);
 
     if (result && member_name.string) {
-        ErisTypeInfoMember *member = eris_typeinfo_compound_member (result,
-                                                                    index);
+        EolTypeInfoMember *member = eol_typeinfo_compound_member (result,
+                                                                  index);
         member->name  = strdup (member_name.string);
         member->value = (int64_t) d_value;
     }
@@ -2264,10 +2311,10 @@ enum_members (Dwarf_Debug  d_debug,
 }
 
 
-static const ErisTypeInfo*
-eris_library_build_enumeration_type_typeinfo (ErisLibrary *library,
-                                              Dwarf_Die    d_type_die,
-                                              Dwarf_Error *d_error)
+static const EolTypeInfo*
+library_build_enumeration_type_typeinfo (EolLibrary  *library,
+                                         Dwarf_Die    d_type_die,
+                                         Dwarf_Error *d_error)
 {
     CHECK_NOT_NULL (library);
     CHECK_NOT_NULL (d_type_die);
@@ -2318,10 +2365,10 @@ eris_library_build_enumeration_type_typeinfo (ErisLibrary *library,
 }
 
 
-static const ErisTypeInfo*
-eris_library_build_structure_type_typeinfo (ErisLibrary *library,
-                                            Dwarf_Die    d_type_die,
-                                            Dwarf_Error *d_error)
+static const EolTypeInfo*
+library_build_structure_type_typeinfo (EolLibrary  *library,
+                                       Dwarf_Die    d_type_die,
+                                       Dwarf_Error *d_error)
 {
     CHECK_NOT_NULL (library);
     CHECK_NOT_NULL (d_type_die);
@@ -2343,7 +2390,7 @@ eris_library_build_structure_type_typeinfo (ErisLibrary *library,
                                DW_AT_byte_size,
                                &d_byte_size,
                                d_error)) {
-        return eris_typeinfo_new_struct (name.string, 0, 0);
+        return eol_typeinfo_new_struct (name.string, 0, 0);
     }
 
     dw_ldie_t child = { library->d_debug };
@@ -2361,35 +2408,33 @@ eris_library_build_structure_type_typeinfo (ErisLibrary *library,
     return compound_type_members (library,
                                   child.die,
                                   d_error,
-                                  eris_typeinfo_new_struct,
+                                  eol_typeinfo_new_struct,
                                   name.string,
                                   d_byte_size,
                                   0);
 }
 
 
-static const ErisTypeInfo*
-eris_library_build_typeinfo (ErisLibrary *library,
-                             Dwarf_Off    d_offset,
-                             Dwarf_Error *d_error)
+static const EolTypeInfo*
+library_build_typeinfo (EolLibrary  *library,
+                        Dwarf_Off    d_offset,
+                        Dwarf_Error *d_error)
 {
     CHECK_NOT_NULL (library);
     CHECK_SIZE_NE (DW_DLV_BADOFFSET, d_offset);
     CHECK_NOT_NULL (d_error);
 
-    Dwarf_Die d_type_die = eris_library_fetch_die (library,
-                                                   d_offset,
-                                                   d_error);
+    Dwarf_Die d_type_die = library_fetch_die (library, d_offset, d_error);
     if (!d_type_die) return NULL;
 
-    const ErisTypeInfo *result = NULL;
+    const EolTypeInfo *result = NULL;
     Dwarf_Half d_tag;
     if (dwarf_tag (d_type_die, &d_tag, d_error) == DW_DLV_OK) {
         switch (d_tag) {
-#define BUILD_TYPEINFO(name)                                            \
-        case DW_TAG_ ## name:                                           \
-            result = eris_library_build_ ## name ## _typeinfo (library, \
-                                           d_type_die, d_error); break;
+#define BUILD_TYPEINFO(name)                                       \
+        case DW_TAG_ ## name:                                      \
+            result = library_build_ ## name ## _typeinfo (library, \
+                                      d_type_die, d_error); break;
 
             DW_TYPE_TAG_NAMES (BUILD_TYPEINFO)
 
@@ -2401,7 +2446,7 @@ eris_library_build_typeinfo (ErisLibrary *library,
                  *       pointers around as opaque void* pointers.
                  */
                 TRACE (TODO YELLOW "DW_TAG_subroutine_type" NORMAL "\n");
-                result = eris_typeinfo_void;
+                result = eol_typeinfo_void;
                 break;
 
             default:
@@ -2417,9 +2462,9 @@ eris_library_build_typeinfo (ErisLibrary *library,
 
 
 static Dwarf_Off
-eris_library_get_tue_offset (ErisLibrary *library,
-                             const char  *name,
-                             Dwarf_Error *d_error)
+library_get_tue_offset (EolLibrary  *library,
+                        const char  *name,
+                        Dwarf_Error *d_error)
 {
     CHECK_NOT_NULL (library);
     CHECK_NOT_NULL (name);
@@ -2460,5 +2505,5 @@ eris_library_get_tue_offset (ErisLibrary *library,
 }
 
 
-#define ERIS_FCALL_IMPLEMENT 1
-#include "eris-fcall.h"
+#define EOL_FCALL_IMPLEMENT 1
+#include "eol-fcall.h"

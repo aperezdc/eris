@@ -6,7 +6,7 @@
 -- Distributed under terms of the MIT license.
 --
 
-local libtest = require("eris").load("libtest")
+local libtest = require("eol").load("libtest")
 local func = libtest.add
 assert.Not.Nil(func)
 assert.Callable(func)

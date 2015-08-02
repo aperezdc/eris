@@ -6,7 +6,7 @@
 -- Distributed under terms of the MIT license.
 --
 
-local libtest = require("eris").load("libtest")
+local libtest = require("eol").load("libtest")
 assert.Not.Nil(libtest)
 
 function check_variable(variable, expected_name, expected_readonly,

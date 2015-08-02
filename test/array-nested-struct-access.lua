@@ -6,7 +6,7 @@
 -- Distributed under terms of the MIT license.
 --
 
-local triangle = require("eris").load("libtest").triangle
+local triangle = require("eol").load("libtest").triangle
 assert.Not.Nil(triangle)
 assert.Equal(3, #triangle)
 assert.Equal(1, triangle[1].x)

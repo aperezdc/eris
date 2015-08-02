@@ -6,7 +6,7 @@
 -- Distributed under terms of the MIT license.
 --
 
-local screen = require("eris").load("libtest").screen
+local screen = require("eol").load("libtest").screen
 assert.Fields(screen, "tl", "br")
 assert.Not.Nil(screen.tl)
 assert.Not.Nil(screen.br)

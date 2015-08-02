@@ -6,7 +6,7 @@
 -- Distributed under terms of the MIT license.
 --
 
-local curve = require("eris").load("libtest").curve
+local curve = require("eol").load("libtest").curve
 assert.Not.Nil(curve)
 assert.Fields(curve, "points", "tangential")
 assert.Equal(4, #curve.points)

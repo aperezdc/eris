@@ -9,7 +9,7 @@
 local help = [[
 Usage: %s file.so typename
 
-This script uses the type information exposed by the Eris module to pretty
+This script uses the type information exposed by the Eol module to pretty
 print C types. The output format can be (mostly) fed back to a C compiler,
 and it also has some additional annotations in comments.
 ]]
@@ -150,8 +150,8 @@ local PP = {
 }
 
 
-local eris = require("eris")
-local T = eris.type(eris.load(arg[1]), arg[2])
+local eol = require("eol")
+local T = eol.type(eol.load(arg[1]), arg[2])
 types:add(T)
 
 for _, tkey in ipairs(types) do

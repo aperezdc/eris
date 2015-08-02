@@ -6,7 +6,7 @@
 -- Distributed under terms of the MIT license.
 --
 
-local libtest = require("eris").load("libtest")
+local libtest = require("eol").load("libtest")
 
 for _, varname in ipairs { "var_flt", "var_dbl" } do
 	local variable = libtest[varname]

@@ -6,9 +6,9 @@
 -- Distributed under terms of the MIT license.
 --
 
-local eris = require("eris")
-local libtest = eris.load("libtest")
-local Continent = eris.type(libtest, "Continent")
+local eol = require("eol")
+local libtest = eol.load("libtest")
+local Continent = eol.type(libtest, "Continent")
 
 assert.Not.Nil(Continent)
 assert.Equal(6, #Continent)

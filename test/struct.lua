@@ -6,7 +6,7 @@
 -- Distributed under terms of the MIT license.
 --
 
-local origin = require("eris").load("libtest").origin
+local origin = require("eol").load("libtest").origin
 assert.Not.Nil(origin)
 assert.Equal("origin", origin.__name)
 

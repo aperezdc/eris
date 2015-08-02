@@ -3,7 +3,7 @@ LUA_TARBALL := ${OUT}/downloads/lua-${LUA_VERSION}.tar.gz
 LUA_SRCPATH := ${OUT}/lua-${LUA_VERSION}
 LUA_LIB     := ${OUT}/liblua.a
 LUA         := ${OUT}/lua
-CPPFLAGS    += -I${LUA_SRCPATH}/src -DERIS_LUA_BUNDLED=1 -DLUA_USE_DLOPEN=1
+CPPFLAGS    += -I${LUA_SRCPATH}/src -DEOL_LUA_BUNDLED=1 -DLUA_USE_DLOPEN=1
 
 
 LUA_LIB_SRCS := lapi.c lauxlib.c lbaselib.c lbitlib.c lcode.c lcorolib.c \
@@ -38,7 +38,7 @@ ${LUA_LIB_SRCS} ${LUA_SRCS} ${LUA_HEADERS}: ${LUA_TARBALL}
 	$Q touch ${LUA_LIB_SRCS} ${LUA_SRCS}
 
 
-eris-lua.h: ${LUA_HEADERS}
+eol-lua.h: ${LUA_HEADERS}
 
 
 clean-lua:

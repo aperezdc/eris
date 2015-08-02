@@ -6,7 +6,7 @@
 -- Distributed under terms of the MIT license.
 --
 
-local max_pos = require("eris").load("libtest").max_pos
+local max_pos = require("eol").load("libtest").max_pos
 assert.Not.Nil(max_pos)
 
 -- Indexed access

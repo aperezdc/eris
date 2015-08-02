@@ -6,7 +6,7 @@
 -- Distributed under terms of the MIT license.
 --
 
-local Square = require("eris").load("libtest").screen.__type
+local Square = require("eol").load("libtest").screen.__type
 assert.Not.Nil(Square)
 assert.Equal(2, #Square)
 assert.Equal("tl", Square[1].name)

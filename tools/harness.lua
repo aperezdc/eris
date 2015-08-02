@@ -10,7 +10,7 @@ local tu = require "testutil"
 
 
 local usage = [[
-Usage: harness.lua <eris-dir> <output-dir> [options]
+Usage: harness.lua <eol-dir> <output-dir> [options]
 This script assumes that it is being run from the build output directory.
 Options:
 
@@ -97,7 +97,7 @@ for i = 3, #arg do
 end
 
 
-local LUA_EXE = os.getenv("ERIS_LUA_EXE")
+local LUA_EXE = os.getenv("EOL_LUA_EXE")
 if LUA_EXE == nil then
 	die("Environment variable LUA_EXE is undefined")
 end

@@ -6,12 +6,12 @@
 -- Distributed under terms of the MIT license.
 --
 
-local eris = require "eris"
+local eol = require "eol"
 local nvg = require "modularize" {
 	"nanovg", prefix = "nvg", type_prefix = "NVG"
 }
-local inttype  = eris.type(nvg.__library, "long int")
-local ucharptr = eris.type(nvg.__library, "unsigned char"):pointerto()
+local inttype  = eol.type(nvg.__library, "long int")
+local ucharptr = eol.type(nvg.__library, "unsigned char"):pointerto()
 
 local W = 320
 local H = 240
@@ -21,7 +21,7 @@ nvg.MakeCurrent(window)
 
 local vg = nvg.Create(false)
 local bits = inttype(W * H / 2)
-local bits_as_ptr = eris.cast(ucharptr, bits)
+local bits_as_ptr = eol.cast(ucharptr, bits)
 local image = nvg.CreateImageRGBA(vg, W, H, 0, bits_as_ptr)
 local paint = nvg.ImagePattern(vg, 0, 0, W, H, 0.0, image, 1.0)
 

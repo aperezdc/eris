@@ -6,12 +6,12 @@
 -- Distributed under terms of the MIT license.
 --
 
-local eris = require "eris"
-local libtest = eris.load "libtest"
-local int32_t = eris.type(libtest, "int32_t")
+local eol = require "eol"
+local libtest = eol.load "libtest"
+local int32_t = eol.type(libtest, "int32_t")
 
 local value = int32_t()
-assert.Equal(int32_t, eris.typeof(value))
+assert.Equal(int32_t, eol.typeof(value))
 assert.Equal(1, #value)
 assert.Equal(0, value.__value)
 

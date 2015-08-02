@@ -4,8 +4,8 @@ libdwarf_path    = ${obj}/libdwarf-${libdwarf_version}
 libdwarf_lib     = ${libdwarf_path}/libdwarf/libdwarf.a
 libdwarf_dep     = ${libdwarf_lib}
 cppflags         = ${cppflags} -I${libdwarf_path}/libdwarf $
-                   -DERIS_WORKAROUND_DWARF_PUBTYPE_DIE_OFFSET=1 $
-                   -DERIS_LIBDWARF_BUNDLED=1
+                   -DEOL_WORKAROUND_DWARF_PUBTYPE_DIE_OFFSET=1 $
+                   -DEOL_LIBDWARF_BUNDLED=1
 
 
 rule libdwarf_configure
@@ -31,7 +31,7 @@ build ${libdwarf_tarball} : urlfetch
   url = https://github.com/Distrotech/libdwarf/archive/${libdwarf_version}.tar.gz
 
 # A dependency on the libdwarf.h header is needed to force the bundled
-# libdwarf to be (at least) configured before building eris-module.o
+# libdwarf to be (at least) configured before building eol-module.o
 #
-build eris-libdwarf.h : phony | ${libdwarf_path}/libdwarf/libdwarf.h $
-                                ${libdwarf_path}/libdwarf/dwarf.h
+build eol-libdwarf.h : phony | ${libdwarf_path}/libdwarf/libdwarf.h $
+                               ${libdwarf_path}/libdwarf/dwarf.h

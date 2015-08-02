@@ -5,7 +5,7 @@
  * Distributed under terms of the MIT license.
  */
 
-#include "../eris-lua.h"
+#include "../eol-lua.h"
 
 #include <sys/types.h>
 #include <sys/stat.h>

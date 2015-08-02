@@ -6,7 +6,7 @@
 -- Distributed under terms of the MIT license.
 --
 
-local intarray = require("eris").load("libtest").intarray
+local intarray = require("eol").load("libtest").intarray
 
 local function check_items(a)
 	for i, v in ipairs(a) do

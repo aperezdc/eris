@@ -6,10 +6,10 @@
 -- Distributed under terms of the MIT license.
 --
 
-local eris = require("eris")
-local libtest = eris.load("libtest")
+local eol = require("eol")
+local libtest = eol.load("libtest")
 assert.Not.Nil(libtest)
 
 local libtest2 = nil
-assert.Error(function () libtest2 = eris.load("libtest2", false) end)
+assert.Error(function () libtest2 = eol.load("libtest2", false) end)
 assert.Nil(libtest2)

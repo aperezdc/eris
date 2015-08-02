@@ -6,13 +6,13 @@
 -- Distributed under terms of the MIT license.
 --
 
-local eris = require "eris"
+local eol = require "eol"
 
-local V = eris.load("libtest").var_i32
+local V = eol.load("libtest").var_i32
 assert.Not.Nil(V)
 
-local T = eris.typeof(V)
+local T = eol.typeof(V)
 assert.Not.Nil(T)
 assert.Equal(V.__type, T)
-assert.Equal(eris.typeof "int32_t", T)
+assert.Equal(eol.typeof "int32_t", T)
 assert.Equal(4, T.sizeof)

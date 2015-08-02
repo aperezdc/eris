@@ -1,33 +1,33 @@
 /*
- * eris-libdwarf.h
+ * eol-libdwarf.h
  * Copyright (C) 2015 Adrian Perez <aperez@igalia.com>
  *
  * Distributed under terms of the MIT license.
  */
 
-#ifndef ERIS_LIBDWARF_H
-#define ERIS_LIBDWARF_H
+#ifndef EOL_LIBDWARF_H
+#define EOL_LIBDWARF_H
 
-#ifdef ERIS_WORKAROUND_DWARF_PUBTYPE_DIE_OFFSET
-# if ERIS_WORKAROUND_DWARF_PUBTYPE_DIE_OFFSET
+#ifdef EOL_WORKAROUND_DWARF_PUBTYPE_DIE_OFFSET
+# if EOL_WORKAROUND_DWARF_PUBTYPE_DIE_OFFSET
 #  define dwarf_pubtype_die_offset dwarf_pubtype_type_die_offset
 # endif
-#endif /* ERIS_WORKAROUND_DWARF_PUBTYPE_DIE_OFFSET */
+#endif /* EOL_WORKAROUND_DWARF_PUBTYPE_DIE_OFFSET */
 
-#if defined(ERIS_LIBDWARF_BUNDLED) && ERIS_LIBDWARF_BUNDLED
+#if defined(EOL_LIBDWARF_BUNDLED) && EOL_LIBDWARF_BUNDLED
 # include "libdwarf.h"
 # include "dwarf.h"
 #else
-# if defined(ERIS_LIBDWARF_LIBDWARF_H) && ERIS_LIBDWARF_LIBDWARF_H
+# if defined(EOL_LIBDWARF_LIBDWARF_H) && EOL_LIBDWARF_LIBDWARF_H
 #  include <libdwarf/libdwarf.h>
 #  include <libdwarf/dwarf.h>
 # else
 #  include <libdwarf.h>
 #  include <dwarf.h>
-# endif /* ERIS_LIBDWARF_LIBDWARF_H */
-#endif /* ERIS_LIBDWARF_BUNDLED */
+# endif /* EOL_LIBDWARF_LIBDWARF_H */
+#endif /* EOL_LIBDWARF_BUNDLED */
 
-#include "eris-util.h"
+#include "eol-util.h"
 
 
 #define DW_TYPE_TAG_NAMES(F) \
@@ -155,7 +155,7 @@ dw_errmsg (Dwarf_Error e)
 }
 
 
-#if ERIS_TRACE
+#if EOL_TRACE
 # define DW_TRACE_DIE(fmt, dbg, die, ...)                 \
     do {                                                  \
         LMEM char *die_repr = dw_die_repr ((dbg), (die)); \
@@ -174,4 +174,4 @@ dw_errmsg (Dwarf_Error e)
 # define DW_TRACE_DIE_ERROR(...) ((void) 0)
 #endif
 
-#endif /* !ERIS_LIBDWARF_H */
+#endif /* !EOL_LIBDWARF_H */

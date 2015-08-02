@@ -1,2 +1,2 @@
 libdwarf_lib = -ldwarf
-libdwarf_dep = eris-libdwarf.h
+libdwarf_dep = eol-libdwarf.h

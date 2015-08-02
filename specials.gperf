@@ -4,14 +4,14 @@
 %readonly-tables
 %enum
 %includes
-%define hash-function-name eris_special_hash
-%define lookup-function-name eris_special_lookup
-struct ErisSpecial {
+%define hash-function-name eol_special_hash
+%define lookup-function-name eol_special_lookup
+struct EolSpecial {
 	const char *name;
-	ErisSpecialCode code;
+	EolSpecialCode code;
 };
 %%
-name, ERIS_SPECIAL_NAME
-type, ERIS_SPECIAL_TYPE
-value, ERIS_SPECIAL_VALUE
-library, ERIS_SPECIAL_LIBRARY
+name, EOL_SPECIAL_NAME
+type, EOL_SPECIAL_TYPE
+value, EOL_SPECIAL_VALUE
+library, EOL_SPECIAL_LIBRARY

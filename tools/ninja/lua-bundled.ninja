@@ -4,7 +4,7 @@ lua_path    = ${obj}/lua-${lua_version}
 lua_lib     = ${obj}/liblua.a
 lua_exe     = ${obj}/lua
 cppflags    = ${cppflags} -I${lua_path}/src $
-              -DERIS_LUA_BUNDLED=1 -DLUA_USE_DLOPEN=1
+              -DEOL_LUA_BUNDLED=1 -DLUA_USE_DLOPEN=1
 
 
 build ${lua_lib} : staticlib $
@@ -124,7 +124,7 @@ build ${lua_path}/src/lapi.c     $
 build ${lua_tarball} : urlfetch
   url = http://www.lua.org/ftp/lua-${lua_version}.tar.gz
 
-build eris-lua.h : phony | ${lua_path}/src/lauxlib.h $
-                           ${lua_path}/src/lualib.h  $
-                           ${lua_path}/src/lua.h     $
-                        || ${lua_exe}
+build eol-lua.h : phony | ${lua_path}/src/lauxlib.h $
+                          ${lua_path}/src/lualib.h  $
+                          ${lua_path}/src/lua.h     $
+                       || ${lua_exe}

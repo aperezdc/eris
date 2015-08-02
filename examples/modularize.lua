@@ -6,9 +6,9 @@
 -- Distributed under terms of the MIT license.
 --
 
-local eris          = require("eris")
-local eris_load     = eris.load
-local eris_type     = eris.type
+local eol           = require("eol")
+local eol_load      = eol.load
+local eol_type      = eol.type
 local _setmetatable = setmetatable
 local _rawget       = rawget
 local _rawset       = rawset
@@ -34,14 +34,14 @@ local function modularize(lib)
 		type_prefix  = ""
 	end
 
-	local library = eris_load(library_name)
+	local library = eol_load(library_name)
 
 	return _setmetatable({ __library = library,
 		types = _setmetatable({ __library = library }, {
 			__index = function (self, key)
 				local t = _rawget(self, key)
 				if t == nil then
-					t = eris_type(library, type_prefix .. key)
+					t = eol_type(library, type_prefix .. key)
 					_rawset(self, key, t or false)
 				end
 				return t

@@ -1,11 +1,11 @@
 /*
- * eris-trace.c
+ * eol-trace.c
  * Copyright (C) 2015 Adrian Perez <aperez@igalia.com>
  *
  * Distributed under terms of the MIT license.
  */
 
-#include "eris-trace.h"
+#include "eol-trace.h"
 
 #include <errno.h>
 #include <stdarg.h>
@@ -13,7 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#undef eris_trace_setup
+#undef eol_trace_setup
 
 
 enum {
@@ -26,19 +26,19 @@ enum {
 
 
 /*
- * These values are configured by eris_trace_setup().
+ * These values are configured by eol_trace_setup().
  */
-bool eris_trace_enabled     = false;
+bool eol_trace_enabled      = false;
 static FILE* trace_output   = NULL;
 static unsigned trace_items = TRACE_NONE;
 
 
 void
-eris_trace (const char *file,
-            unsigned    line,
-            const char* func,
-            const char* fmt,
-            ...)
+eol_trace (const char *file,
+           unsigned    line,
+           const char* func,
+           const char* fmt,
+           ...)
 {
     if (*fmt == '>') {
         fmt++;
@@ -71,14 +71,14 @@ eris_trace (const char *file,
 
 
 void
-eris_trace_setup (void)
+eol_trace_setup (void)
 {
     /* Tracing was already configured. */
     if (trace_output != NULL)
         return;
 
     trace_output = stderr;
-    const char *env_value = getenv ("ERIS_TRACE");
+    const char *env_value = getenv ("EOL_TRACE");
 
     /* Check for an empty environment variable. */
     if (!env_value || !*env_value)
@@ -133,5 +133,5 @@ eris_trace_setup (void)
     }
 
 setup_done:
-    eris_trace_enabled = true;
+    eol_trace_enabled = true;
 }

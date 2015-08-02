@@ -10,7 +10,7 @@
 # which then can be used to find the test harness and the needed binaries.
 curdir=$(pwd)
 cd "$(dirname "$0")/.."
-erisdir=$(pwd)
+eoldir=$(pwd)
 
 if ! test -r build.conf
 then
@@ -28,7 +28,7 @@ then
 	luaexe="${objdir}/lua"
 fi
 
-for file in libtest.so eris.so testutil.so "${luaexe}"
+for file in libtest.so eol.so testutil.so "${luaexe}"
 do
 	if ! test -r "${file}"
 	then
@@ -38,6 +38,6 @@ do
 	fi
 done
 
-export ERIS_LUA_EXE="${luaexe}"
-export LUA_INIT="@${erisdir}/tools/harness-assert.lua"
-exec "${luaexe}" "${erisdir}/tools/harness.lua" "${erisdir}" "${curdir}" "$@"
+export EOL_LUA_EXE="${luaexe}"
+export LUA_INIT="@${eoldir}/tools/harness-assert.lua"
+exec "${luaexe}" "${eoldir}/tools/harness.lua" "${eoldir}" "${curdir}" "$@"

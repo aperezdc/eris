@@ -6,6 +6,6 @@
 -- Distributed under terms of the MIT license.
 --
 
-local eris = require "eris"
-assert(eris, "could not load eris module")
-assert.Field(eris, "load")
+local eol = require "eol"
+assert(eol, "could not load 'eol' module")
+assert.Field(eol, "load")
