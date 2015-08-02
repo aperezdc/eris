@@ -1,4 +1,4 @@
-LUA_VERSION := 5.3.0
+LUA_VERSION := 5.3.1
 LUA_TARBALL := ${OUT}/downloads/lua-${LUA_VERSION}.tar.gz
 LUA_SRCPATH := ${OUT}/lua-${LUA_VERSION}
 LUA_LIB     := ${OUT}/liblua.a

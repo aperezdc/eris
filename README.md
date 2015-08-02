@@ -23,7 +23,8 @@ Compatibility
 
 Eöl is tested and compatible with:
 
-* Lua 5.3
+* Lua 5.3.1
+* Lua 5.3.0
 
 
 Building
