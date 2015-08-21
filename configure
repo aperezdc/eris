@@ -565,8 +565,9 @@ cxx      = ${CXX}
 CFLAGS   = ${CFLAGS} ${FFI_CFLAGS} \${EXTRA_CFLAGS}
 CXXFLAGS = ${CXXFLAGS} \${EXTRA_CXXFLAGS}
 CPPFLAGS = ${CPPFLAGS} \${EXTRA_CPPFLAGS}
-LDFLAGS  = ${LDFLAGS} ${FFI_LDFLAGS} \${EXTRA_LDFLAGS}
+LDFLAGS  = ${LDFLAGS} \${EXTRA_LDFLAGS}
 libs     = ${LIBS} \${EXTRA_LIBS}
+FFI_LDFLAGS = ${FFI_LDFLAGS}
 
 lua_build = ${lua_build_type}
 system_lua_bin = ${system_lua_bin}

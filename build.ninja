@@ -58,8 +58,8 @@ build ${obj}/eol.so : ld     $
       ${obj}/eol-libdwarf.o  $
       ${obj}/eol-typecache.o $
       ${obj}/eol-module.o    | ${libdwarf_dep}
+  libs = ${libs} ${libdwarf_lib} -lelf ${FFI_LDFLAGS}
   ldflags = ${ldflags} -shared
-  libs = ${libs} ${libdwarf_lib} -lelf
 
 # Lua module: testutil.so
 #
