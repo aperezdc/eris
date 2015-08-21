@@ -15,11 +15,18 @@
 # else
 #  include "eol-fcall-ffi.h"
 # endif
-#elif defined(__x86_64__) || defined(__x86_64) || \
-    defined(__amd64__)  || defined(__amd64)
-# ifdef EOL_FCALL_IMPLEMENT
-#  include "eol-fcall-x64.h"
-# endif
 #else
-# error No eol_fcall implementation chosen, you may want to configure with --enable-ffi
+# if defined(__x86_64__) || defined(__x86_64) || \
+    defined(__amd64__)  || defined(__amd64)
+#  ifdef EOL_FCALL_IMPLEMENT
+#   include "eol-fcall-x64.c"
+#  else
+#   include "eol-fcall-x64.h"
+#  endif
+# else
+#  error No eol_fcall implementation chosen, you may want to configure with --enable-ffi
+# endif
+# ifdef EOL_FCALL_IMPLEMENT
+#  include "eol-fcall-dasm.c"
+# endif
 #endif

@@ -37,9 +37,9 @@ rule ld
   command = $cc $ldflags -o $out $in $libs
   description = Link $out
 
-
 include tools/ninja/lua-${lua_build}.ninja
 include tools/ninja/libdwarf-${libdwarf_build}.ninja
+include tools/ninja/dynasm-${jit_arch}.ninja
 
 build specials.inc : gperf specials.gperf
 
@@ -50,7 +50,7 @@ build ${obj}/eol-trace.o     : cc eol-trace.c
 build ${obj}/eol-typing.o    : cc eol-typing.c
 build ${obj}/eol-libdwarf.o  : cc eol-libdwarf.c
 build ${obj}/eol-typecache.o : cc eol-typecache.c
-build ${obj}/eol-module.o    : cc eol-module.c | specials.inc eol-lua.h eol-libdwarf.h
+build ${obj}/eol-module.o    : cc eol-module.c | specials.inc eol-lua.h eol-libdwarf.h eol-fcall-${eol_fcall}.c
 build ${obj}/eol.so : ld     $
       ${obj}/eol-util.o      $
       ${obj}/eol-trace.o     $

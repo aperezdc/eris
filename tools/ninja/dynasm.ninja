@@ -1,0 +1,21 @@
+bitop_version = 1.0.2
+bitop_tarball = ${obj}/downloads/LuaBitOp-${bitop_version}.tar.gz
+bitop_path    = ${obj}/LuaBitOp-${bitop_version}
+
+rule dynasm
+  command = env LUA_CPATH=${obj}/?.so ${lua_exe} dynasm/dynasm.lua ${dynasm_flags} -o ${out} ${in}
+  description = DynASM(${jit_arch}) ${in} -> ${out}
+
+build ${bitop_tarball} : urlfetch
+  url = http://bitop.luajit.org/download/LuaBitOp-${bitop_version}.tar.gz
+
+build ${bitop_path}/bit.c : untargz ${bitop_tarball}
+
+build ${obj}/bit.o  : cc ${bitop_path}/bit.c || eol-lua.h
+  cppflags = ${cppflags} -DLUA_NUMBER_DOUBLE
+
+build ${obj}/bit.so : ld ${obj}/bit.o
+  ldflags = ${ldflags} -shared
+
+build eol-fcall-${eol_fcall}.c : dynasm $
+      eol-fcall-${eol_fcall_in}.dasc | eol-fcall-dasm.c || ${lua_exe} ${obj}/bit.so
