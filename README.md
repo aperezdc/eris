@@ -94,7 +94,7 @@ submodules, and the exact needed version will be fetched automatically.
 Note that the examples can only be built with Ninja at the moment:
 
 ```sh
-git submodule update --recursive
+git submodule update --recursive --init
 ninja examples
 ```
 

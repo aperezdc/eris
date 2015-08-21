@@ -18,6 +18,25 @@ build ${obj}/upng.o  : cc examples/upng/upng.c
 build ${obj}/upng.so : ld ${obj}/upng.o
   ldflags = ${ldflags} -shared
 
+# ImGUI module.
+build ${obj}/imgui-cimgui.o    : cxx examples/cimgui/cimgui/cimgui.cpp
+build ${obj}/imgui-fontAtlas.o : cxx examples/cimgui/cimgui/fontAtlas.cpp
+build ${obj}/imgui-drawList.o  : cxx examples/cimgui/cimgui/drawList.cpp
+build ${obj}/imgui-draw.o      : cxx examples/cimgui/imgui/imgui_draw.cpp
+build ${obj}/imgui-demo.o      : cxx examples/cimgui/imgui/imgui_demo.cpp
+build ${obj}/imgui.o           : cxx examples/cimgui/imgui/imgui.cpp
+build ${obj}/imgui-util.o      : cc  examples/imgui-util.c
+build ${obj}/imgui.so          : ld $
+      ${obj}/imgui-cimgui.o    $
+      ${obj}/imgui-fontAtlas.o $
+      ${obj}/imgui-drawList.o  $
+      ${obj}/imgui-draw.o      $
+      ${obj}/imgui-demo.o      $
+      ${obj}/imgui.o           $
+      ${obj}/imgui-util.o
+  ldflags = ${ldflags} -shared
+  libs = -lGLESv2 -lglfw -lstdc++
+
 # Makes a wrapper shell script which changes to the output directory
 # and runs Lua in there passing the wrapped script. This makes the
 # examples easier to run.
@@ -30,14 +49,28 @@ build ${obj}/examples/nanovg-demo  : wrap examples/nanovg-demo.lua
 build ${obj}/examples/nanovg-noise : wrap examples/nanovg-noise.lua
 build ${obj}/examples/upng-info    : wrap examples/upng-info.lua
 
-build examples-wrapper : phony    $
+build examples-wrapper-c : phony  $
       ${obj}/examples/type-pp     $
       ${obj}/examples/upng-info   $
       ${obj}/examples/nanovg-demo $
       ${obj}/examples/nanovg-noise
 
-build examples : phony $
-      examples-wrapper $
-      ${obj}/nanovg.so $
-      ${obj}/upng.so   $
+build examples-c : phony $
+      examples-wrapper-c $
+      ${obj}/nanovg.so   $
+      ${obj}/upng.so     $
       ${obj}/modularize.lua
+
+
+build ${obj}/examples/ui : wrap examples/ui.lua
+
+build examples-wrapper-cxx : phony $
+      ${obj}/examples/ui
+
+build examples-cxx : phony $
+      examples-wrapper-cxx $
+      ${obj}/imgui.so      $
+      ${obj}/modularize.lua
+
+
+build examples : phony examples-c examples-cxx

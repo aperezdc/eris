@@ -4,3 +4,6 @@
 [submodule "examples/upng"]
 	path = examples/upng
 	url = git://github.com/elanthis/upng
+[submodule "examples/cimgui"]
+	path = examples/cimgui
+	url = git://github.com/Extrawurst/cimgui
