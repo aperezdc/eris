@@ -1,4 +1,12 @@
 language: c
+addons:
+    apt:
+        packages:
+            - libelf-dev
+            - glibc-dev
+            - ninja-build
+            - gperf
+sudo: false
 compiler:
     # - clang
     - gcc
@@ -7,9 +15,9 @@ env:
         - COVERAGE=true
         - COVERAGE=false
 install:
-    - sudo apt-get install -y libelf-dev ninja-build gperf
-    - $COVERAGE && sudo pip install cpp-coveralls || true
+    - $COVERAGE && pip install --user cpp-coveralls || true
 script:
+    - export PATH="${PATH}:${HOME}/.local/bin"
     - $COVERAGE && export CC="${CC} -fprofile-arcs -ftest-coverage -O0 -g" || true
     - ./configure --objdir=out --enable-checks --enable-bundled-lua --enable-bundled-libdwarf && ninja && ./run-tests --verbose --output=tap
 after_success:
