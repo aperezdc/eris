@@ -27,7 +27,7 @@ OUT     := ${obj}
 PREFIX   = ${prefix}
 LDLIBS   = ${libs}
 CC       = ${cc}
-LDFLAGS += -fPIC -Wl,-E
+LDFLAGS += -fPIC -Wl,-E -Wl,--as-needed
 
 
 define RUN_FETCH_URL
