@@ -60,7 +60,7 @@ distclean: clean
 
 include tools/make/lua-${lua_build}.mk
 include tools/make/libdwarf-${libdwarf_build}.mk
-
+include tools/make/dynasm-${jit_arch}.mk
 
 # EOL module sources.
 EOL_MODULE_SRCS := eol-module.c eol-trace.c eol-util.c eol-typing.c \
@@ -105,7 +105,7 @@ clean:
 	$Q ${RM} ${OUT}/libtest.so ${OUT}/libtest.o
 	$Q ${RM} ${OUT}/libtest2.so ${OUT}/libtest2.o
 
-eol-module.c: eol-lua.h eol-libdwarf.h specials.inc
+eol-module.c: eol-lua.h eol-libdwarf.h specials.inc eol-fcall-${eol_fcall}.c
 tools/harness-testutil.c: eol-lua.h
 
 ${OUT}/eol.so: ${EOL_MODULE_OBJS} ${LIBDWARF}

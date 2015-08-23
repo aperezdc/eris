@@ -1,0 +1,5 @@
+eol_fcall    := x86
+eol_fcall_in := x86
+dynasm_flags := -D X86
+
+include tools/ninja/dynasm.mk
