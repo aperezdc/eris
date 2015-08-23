@@ -8,7 +8,7 @@ addons:
             - gperf
 sudo: false
 compiler:
-    # - clang
+    - clang
     - gcc
 env:
     matrix:
