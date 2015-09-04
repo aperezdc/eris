@@ -409,6 +409,59 @@ eol_typeinfo_sizeof (const EolTypeInfo *typeinfo)
 }
 
 
+#define ALIGNMENT_OF(S) \
+    ((int) ((char*) &S.v - (char*) &S))
+
+int8_t
+eol_typeinfo_alignment (const EolTypeInfo *typeinfo)
+{
+    CHECK_NOT_NULL (typeinfo);
+
+    switch (typeinfo->type) {
+        case EOL_TYPE_VOID:
+            return -1;
+
+        case EOL_TYPE_ARRAY:
+        case EOL_TYPE_CONST:
+        case EOL_TYPE_TYPEDEF:
+            return eol_typeinfo_alignment (eol_typeinfo_base (typeinfo));
+
+        case EOL_TYPE_U8:
+        case EOL_TYPE_S8:
+        case EOL_TYPE_BOOL:
+        case EOL_TYPE_POINTER:
+        case EOL_TYPE_ENUM:
+        case EOL_TYPE_STRUCT:
+        case EOL_TYPE_UNION:
+            return eol_typeinfo_sizeof (typeinfo);
+
+        case EOL_TYPE_U16:
+        case EOL_TYPE_S16: {
+            struct { char ch; uint16_t v; } dummy;
+            return ALIGNMENT_OF (dummy);
+        }
+        case EOL_TYPE_U32:
+        case EOL_TYPE_S32: {
+            struct { char ch; uint32_t v; } dummy;
+            return ALIGNMENT_OF (dummy);
+        }
+        case EOL_TYPE_U64:
+        case EOL_TYPE_S64: {
+            struct { char ch; uint64_t v; } dummy;
+            return ALIGNMENT_OF (dummy);
+        }
+        case EOL_TYPE_FLOAT: {
+            struct { char ch; float v; } dummy;
+            return ALIGNMENT_OF (dummy);
+        }
+        case EOL_TYPE_DOUBLE: {
+            struct { char ch; double v; } dummy;
+            return ALIGNMENT_OF (dummy);
+        }
+    }
+}
+
+
 const EolTypeInfo*
 eol_typeinfo_get_compound (const EolTypeInfo *typeinfo)
 {

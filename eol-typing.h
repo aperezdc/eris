@@ -137,6 +137,7 @@ extern EolType     eol_typeinfo_type   (const EolTypeInfo *typeinfo);
 extern bool        eol_typeinfo_equal  (const EolTypeInfo *a,
                                         const EolTypeInfo *b);
 extern uint32_t    eol_typeinfo_sizeof (const EolTypeInfo *typeinfo);
+extern int8_t      eol_typeinfo_alignment (const EolTypeInfo *typeinfo);
 extern uint64_t    eol_typeinfo_array_n_items (const EolTypeInfo* typeinfo);
 extern bool        eol_typeinfo_struct_is_opaque (const EolTypeInfo *typeinfo);
 extern uint32_t    eol_typeinfo_compound_n_members (const EolTypeInfo *typeinfo);

@@ -1773,6 +1773,25 @@ eol_offsetof (lua_State *L)
 }
 
 
+static int
+eol_alignof (lua_State *L)
+{
+    const EolTypeInfo *typeinfo = NULL;
+
+    EolVariable *ev;
+    if ((ev = luaL_testudata (L, 1, EOL_VARIABLE))) {
+        typeinfo = ev->typeinfo;
+    } else {
+        typeinfo = to_eol_typeinfo (L, 1);
+    }
+
+    CHECK_NOT_NULL (typeinfo);
+    lua_pushinteger (L, eol_typeinfo_alignment (typeinfo));
+    return 1;
+}
+
+
+
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
 # define EOL_LE 1
 # define EOL_BE 0
@@ -1823,6 +1842,7 @@ static const luaL_Reg eollib[] = {
     { "sizeof",   eol_sizeof   },
     { "typeof",   eol_typeof   },
     { "offsetof", eol_offsetof },
+    { "alignof",  eol_alignof  },
     { "cast",     eol_cast     },
     { "abi",      eol_abi      },
     { NULL, NULL },
