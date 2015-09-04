@@ -1606,7 +1606,9 @@ static int
 eol_type (lua_State *L)
 {
     EolLibrary *el = to_eol_library (L, 1);
-    const char *name = luaL_checkstring (L, 2);
+
+    luaL_checktype (L, 2, LUA_TSTRING);
+    const char *name = lua_tostring (L, 2);
 
     Dwarf_Error d_error = DW_DLE_NE;
     Dwarf_Off d_offset = library_get_tue_offset (el, name, &d_error);
