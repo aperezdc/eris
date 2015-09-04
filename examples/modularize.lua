@@ -1,6 +1,6 @@
 #! /usr/bin/env lua
 --
--- nanovg-demo.lua
+-- modularize.lua
 -- Copyright (C) 2015 Adrian Perez <aperez@igalia.com>
 --
 -- Distributed under terms of the MIT license.
@@ -15,9 +15,22 @@ local _rawset       = rawset
 local _type         = type
 
 --
--- Makes functions available (and memoized) in the "nvg" table,
--- plus types in the "nvg.types" table. Note that prefixes are
--- added automatically when looking up items from the library.
+-- Makes functions and types available (and memoized) in a table,
+-- Prefixes are added automatically when looking up items from the
+-- library, and different prefixes can be specified for functions
+-- and types.
+--
+-- Usage example:
+--
+--    png = require "modularize" {
+--    	"libpng", prefix = "png_", type_prefix = "png_"
+--    }
+--
+--    color = png.types.color_8()
+--    color.red = 255
+--    color.green = 127
+--
+--    print(png.get_header_ver(nil))
 --
 local function modularize(lib)
 	local type_prefix
