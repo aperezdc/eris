@@ -1016,11 +1016,22 @@ function_index (lua_State *L)
     return 1;
 }
 
+
+static int
+function_len (lua_State *L)
+{
+    EolFunction *ef = to_eol_function (L);
+    lua_pushinteger (L, ef->n_param);
+    return 1;
+}
+
+
 /* Methods for EolFunction userdatas. */
 static const luaL_Reg function_methods[] = {
     { "__call",     function_call     },
     { "__gc",       function_gc       },
     { "__tostring", function_tostring },
+    { "__len",      function_len      },
     { "__index",    function_index    },
     { NULL, NULL }
 };
