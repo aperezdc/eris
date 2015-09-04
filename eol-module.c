@@ -1787,14 +1787,22 @@ eol_abi (lua_State *L)
         lua_pushboolean (L, sizeof (ptrdiff_t) == 4);
     } else if (string_equal (param, "64bit")) {
         lua_pushboolean (L, sizeof (ptrdiff_t) == 8);
-
-    // TODO: The following flags are unsupported.
-#if 0
-    } else if (string_equal (param, "fpu")) {
-    } else if (string_equal (param, "softfpu")) {
-    } else if (string_equal (param, "eabi")) {
     } else if (string_equal (param, "win")) {
-#endif
+        // FIXME: Change this if Windows is ever supported.
+        lua_pushboolean (L, false);
+    } else if (string_equal (param, "fpu")) {
+        // FIXME: For the moment only x86_64 is supported, which always has a
+        // floating point unit. This needs to be changed when ARM or MIPS is
+        // implemented.
+        lua_pushboolean (L, true);
+    } else if (string_equal (param, "softfpu")) {
+        // FIXME: Ditto, do not use a hardcoded value for ARM/MIPS.
+        lua_pushboolean (L, false);
+    } else if (string_equal (param, "eabi")) {
+        // FIXME: There is only one ABI for x86_64, EABI is for ARM. Also, if
+        // MIPS suport is added later, should't there be "o32" and similar ABI
+        // flags?
+        lua_pushboolean (L, false);
     } else {
         return luaL_error (L, "invalid parameter '%s'", param);
     }
