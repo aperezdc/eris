@@ -11,6 +11,7 @@
 int intvar = 42;
 int *intptrvar = &intvar;
 int intarray[] = { 1, 2, 3, 4, 5 };
+void *voidptr = &intarray[2];
 
 /* Standard C99 integral typedefs. */
 int8_t   var_i8  =  -8;

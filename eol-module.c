@@ -1638,12 +1638,20 @@ eol_sizeof (lua_State *L)
     EolVariable *ev;
     if ((ev = luaL_testudata (L, 1, EOL_VARIABLE))) {
         typeinfo = ev->typeinfo;
+    } else if (luaL_testudata (L, 1, EOL_FUNCTION)) {
+        /* Functions do not have a size, return "nil" */
+        lua_pushnil (L);
+        return 1;
     } else {
         typeinfo = to_eol_typeinfo (L, 1);
     }
 
     CHECK_NOT_NULL (typeinfo);
-    lua_pushinteger (L, eol_typeinfo_sizeof (typeinfo));
+    if (eol_typeinfo_is_void (typeinfo)) {
+        lua_pushnil (L);
+    } else {
+        lua_pushinteger (L, eol_typeinfo_sizeof (typeinfo));
+    }
     return 1;
 }
 
