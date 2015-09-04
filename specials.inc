@@ -35,7 +35,7 @@ struct EolSpecial {
 	EolSpecialCode code;
 };
 #include <string.h>
-/* maximum key range = 6, duplicates = 0 */
+/* maximum key range = 16, duplicates = 0 */
 
 #ifdef __GNUC__
 __inline
@@ -49,32 +49,32 @@ eol_special_hash (register const char *str, register unsigned int len)
 {
   static const unsigned char asso_values[] =
     {
-     10,10,10,10,10,10,10,10,10,10,
-     10,10,10,10,10,10,10,10,10,10,
-     10,10,10,10,10,10,10,10,10,10,
-     10,10,10,10,10,10,10,10,10,10,
-     10,10,10,10,10,10,10,10,10,10,
-     10,10,10,10,10,10,10,10,10,10,
-     10,10,10,10,10,10,10,10,10,10,
-     10,10,10,10,10,10,10,10,10,10,
-     10,10,10,10,10,10,10,10,10,10,
-     10,10,10,10,10,10,10,10,10,10,
-     10,10,10,10,10,10,10,10, 0,10,
-      5,10,10,10,10,10, 0,10, 0,10,
-     10,10,10,10,10,10,10,10,10,10,
-     10,10,10,10,10,10,10,10,10,10,
-     10,10,10,10,10,10,10,10,10,10,
-     10,10,10,10,10,10,10,10,10,10,
-     10,10,10,10,10,10,10,10,10,10,
-     10,10,10,10,10,10,10,10,10,10,
-     10,10,10,10,10,10,10,10,10,10,
-     10,10,10,10,10,10,10,10,10,10,
-     10,10,10,10,10,10,10,10,10,10,
-     10,10,10,10,10,10,10,10,10,10,
-     10,10,10,10,10,10,10,10,10,10,
-     10,10,10,10,10,10,10,10,10,10,
-     10,10,10,10,10,10,10,10,10,10,
-     10,10,10,10,10,10
+      20, 20, 20, 20, 20, 20, 20, 20, 20, 20,
+      20, 20, 20, 20, 20, 20, 20, 20, 20, 20,
+      20, 20, 20, 20, 20, 20, 20, 20, 20, 20,
+      20, 20, 20, 20, 20, 20, 20, 20, 20, 20,
+      20, 20, 20, 20, 20, 20, 20, 20, 20, 20,
+      20, 20, 20, 20, 20, 20, 20, 20, 20, 20,
+      20, 20, 20, 20, 20, 20, 20, 20, 20, 20,
+      20, 20, 20, 20, 20, 20, 20, 20, 20, 20,
+      20, 20, 20, 20, 20, 20, 20, 20, 20, 20,
+      20, 20, 20, 20, 20, 20, 20,  5, 20, 20,
+      20, 20, 20, 20, 20, 20, 20, 15,  0, 20,
+      10, 20,  0, 20,  0,  0,  0, 20,  0, 20,
+      20, 20, 20, 20, 20, 20, 20, 20, 20, 20,
+      20, 20, 20, 20, 20, 20, 20, 20, 20, 20,
+      20, 20, 20, 20, 20, 20, 20, 20, 20, 20,
+      20, 20, 20, 20, 20, 20, 20, 20, 20, 20,
+      20, 20, 20, 20, 20, 20, 20, 20, 20, 20,
+      20, 20, 20, 20, 20, 20, 20, 20, 20, 20,
+      20, 20, 20, 20, 20, 20, 20, 20, 20, 20,
+      20, 20, 20, 20, 20, 20, 20, 20, 20, 20,
+      20, 20, 20, 20, 20, 20, 20, 20, 20, 20,
+      20, 20, 20, 20, 20, 20, 20, 20, 20, 20,
+      20, 20, 20, 20, 20, 20, 20, 20, 20, 20,
+      20, 20, 20, 20, 20, 20, 20, 20, 20, 20,
+      20, 20, 20, 20, 20, 20, 20, 20, 20, 20,
+      20, 20, 20, 20, 20, 20
     };
   return len + asso_values[(unsigned char)str[0]];
 }
@@ -90,11 +90,11 @@ eol_special_lookup (register const char *str, register unsigned int len)
 {
   enum
     {
-      TOTAL_KEYWORDS = 4,
+      TOTAL_KEYWORDS = 9,
       MIN_WORD_LENGTH = 4,
-      MAX_WORD_LENGTH = 7,
+      MAX_WORD_LENGTH = 9,
       MIN_HASH_VALUE = 4,
-      MAX_HASH_VALUE = 9
+      MAX_HASH_VALUE = 19
     };
 
   static const struct EolSpecial wordlist[] =
@@ -104,12 +104,23 @@ eol_special_lookup (register const char *str, register unsigned int len)
       {"type", EOL_SPECIAL_TYPE},
 #line 16 "specials.gperf"
       {"value", EOL_SPECIAL_VALUE},
-      {""},
+#line 18 "specials.gperf"
+      {"sizeof", EOL_SPECIAL_SIZEOF},
 #line 17 "specials.gperf"
       {"library", EOL_SPECIAL_LIBRARY},
+#line 19 "specials.gperf"
+      {"readonly", EOL_SPECIAL_READONLY},
+#line 21 "specials.gperf"
+      {"pointerto", EOL_SPECIAL_POINTERTO},
+      {""}, {""},
+#line 22 "specials.gperf"
+      {"arrayof", EOL_SPECIAL_ARRAYOF},
       {""},
 #line 14 "specials.gperf"
-      {"name", EOL_SPECIAL_NAME}
+      {"name", EOL_SPECIAL_NAME},
+      {""}, {""}, {""}, {""},
+#line 20 "specials.gperf"
+      {"kind", EOL_SPECIAL_KIND}
     };
 
   if (len <= MAX_WORD_LENGTH && len >= MIN_WORD_LENGTH)

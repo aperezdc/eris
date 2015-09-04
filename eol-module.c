@@ -36,6 +36,11 @@ typedef enum {
     EOL_SPECIAL_TYPE,
     EOL_SPECIAL_VALUE,
     EOL_SPECIAL_LIBRARY,
+    EOL_SPECIAL_SIZEOF,
+    EOL_SPECIAL_READONLY,
+    EOL_SPECIAL_KIND,
+    EOL_SPECIAL_POINTERTO,
+    EOL_SPECIAL_ARRAYOF,
 } EolSpecialCode;
 
 #include "specials.inc"
@@ -311,24 +316,39 @@ typeinfo_index (lua_State *L)
             lua_setfield (L, -2, "offset");
         }
     } else {
-        const char *field = luaL_checkstring (L, 2);
-        if (!strcmp ("name", field)) {
-            lua_pushstring (L, eol_typeinfo_name (typeinfo));
-        } else if (!strcmp ("sizeof", field)) {
-            lua_pushinteger (L, eol_typeinfo_sizeof (typeinfo));
-        } else if (!strcmp ("readonly", field)) {
-            lua_pushboolean (L, eol_typeinfo_is_readonly (typeinfo));
-        } else if (string_equal ("kind", field)) {
-            lua_pushstring (L, typeinfo_type_string (typeinfo));
-        } else if (string_equal ("type", field)) {
-            const EolTypeInfo *base = eol_typeinfo_base (typeinfo);
-            if (base) typeinfo_push_userdata (L, base);
-        } else if (string_equal ("pointerto", field)) {
-            lua_pushcfunction (L, typeinfo_pointerto);
-        } else if (string_equal ("arrayof", field)) {
-            lua_pushcfunction (L, typeinfo_arrayof);
-        } else {
-            return luaL_error (L, "invalid field '%s'", field);
+        size_t named_field_length = 0;
+        const char *named_field =
+                luaL_checklstring (L, 2, &named_field_length);
+        const EolSpecial *s = eol_special_lookup (named_field,
+                                                  named_field_length);
+        if (!s) goto invalid_field;
+        switch (s->code) {
+            case EOL_SPECIAL_NAME:
+                lua_pushstring (L, eol_typeinfo_name (typeinfo));
+                break;
+            case EOL_SPECIAL_SIZEOF:
+                lua_pushinteger (L, eol_typeinfo_sizeof (typeinfo));
+                break;
+            case EOL_SPECIAL_READONLY:
+                lua_pushboolean (L, eol_typeinfo_is_readonly (typeinfo));
+                break;
+            case EOL_SPECIAL_KIND:
+                lua_pushstring (L, typeinfo_type_string (typeinfo));
+                break;
+            case EOL_SPECIAL_TYPE: {
+                const EolTypeInfo *base = eol_typeinfo_base (typeinfo);
+                if (base) typeinfo_push_userdata (L, base);
+                break;
+            }
+            case EOL_SPECIAL_POINTERTO:
+                lua_pushcfunction (L, typeinfo_pointerto);
+                break;
+            case EOL_SPECIAL_ARRAYOF:
+                lua_pushcfunction (L, typeinfo_arrayof);
+                break;
+            default:
+            invalid_field:
+                return luaL_error (L, "invalid field '%s'", named_field);
         }
     }
     return 1;
@@ -993,7 +1013,7 @@ function_index (lua_State *L)
                                named_field[0] == '_' &&
                                named_field[1] == '_')
             ? eol_special_lookup (named_field + 2, named_field_length - 2)
-            : eol_special_lookup (named_field, named_field_length);
+            : NULL;
         if (!s) goto invalid_field;
         switch (s->code) {
             case EOL_SPECIAL_NAME:
@@ -1164,14 +1184,14 @@ cvalue_push (lua_State         *L,
 
 
 static inline int
-variable_index_special (lua_State     *L,
-                        EolVariable   *V,
-                        EolSpecialCode code)
+variable_index_special (lua_State        *L,
+                        EolVariable      *V,
+                        const EolSpecial *S)
 {
     CHECK_NOT_NULL (L);
     CHECK_NOT_NULL (V);
 
-    switch (code) {
+    switch (S->code) {
         case EOL_SPECIAL_NAME:
             lua_pushstring (L, V->name);
             break;
@@ -1183,6 +1203,8 @@ variable_index_special (lua_State     *L,
         case EOL_SPECIAL_LIBRARY:
             library_push_userdata (L, V->library);
             break;
+        default:
+            return luaL_error (L, "invalid field '%s'", S->name);
     }
     return 1;
 }
@@ -1204,7 +1226,7 @@ variable_index (lua_State *L)
                                named_field[1] == '_')
             ? eol_special_lookup (named_field + 2, named_field_length - 2)
             : NULL;
-        if (s) return variable_index_special (L, V, s->code);
+        if (s) return variable_index_special (L, V, s);
     }
 
     switch (eol_typeinfo_type (T)) {
@@ -1325,23 +1347,23 @@ cvalue_get (lua_State         *L,
 
 
 static inline int
-variable_newindex_special (lua_State     *L,
-                           int            lindex,
-                           EolVariable   *V,
-                           EolSpecialCode code)
+variable_newindex_special (lua_State        *L,
+                           int               lindex,
+                           EolVariable      *V,
+                           const EolSpecial *S)
 {
     CHECK_NOT_NULL (L);
     CHECK_NOT_NULL (V);
 
-    switch (code) {
+    switch (S->code) {
         case EOL_SPECIAL_VALUE:
             return cvalue_get (L, lindex, V->typeinfo, V->address);
         case EOL_SPECIAL_NAME:
-            return luaL_error (L, "__name is read-only");
         case EOL_SPECIAL_TYPE:
-            return luaL_error (L, "__type is read-only");
         case EOL_SPECIAL_LIBRARY:
-            return luaL_error (L, "__library is read-only");
+            return luaL_error (L, "field '__%s' is read-only", S->name);
+        default:
+            return luaL_error (L, "invalid field '__%s'", S->name);
     }
 }
 
@@ -1362,7 +1384,7 @@ variable_newindex (lua_State *L)
         const EolSpecial *s = (length > 2 && name[0] == '_' && name[1] == '_')
             ? eol_special_lookup (name + 2, length - 2)
             : NULL;
-        if (s) return variable_newindex_special (L, 3, V, s->code);
+        if (s) return variable_newindex_special (L, 3, V, s);
     }
 
     const EolTypeInfo *T = eol_typeinfo_get_non_synthetic (V->typeinfo);
@@ -1820,7 +1842,7 @@ lookup_die (EolLibrary  *el,
             continue;
         }
 
-        const bool found = (strcmp (global_name, name) == 0);
+        const bool found = string_equal (global_name, name);
         dwarf_dealloc (el->d_debug, global_name, DW_DLA_STRING);
         global_name = NULL;
 
@@ -2542,7 +2564,7 @@ library_get_tue_offset (EolLibrary  *library,
             continue;
         }
 
-        const bool found = (strcmp (type_name, name) == 0);
+        const bool found = string_equal (type_name, name);
         dwarf_dealloc (library->d_debug, type_name, DW_DLA_STRING);
 
         if (found) {
