@@ -966,30 +966,52 @@ function_tostring (lua_State *L)
     return 1;
 }
 
+
+#define L_BOUNDS_CHECK(vname, i, expr)                       \
+    lua_Integer vname = luaL_checkinteger (L, (i));          \
+    do {                                                     \
+        size_t max = (expr);                                 \
+        if (vname < 0) vname += max;                         \
+        if (vname <= 0 || vname > max)                       \
+            return luaL_error (L, "index %d out of bounds ", \
+                               "(effective=%d, max=%d)",     \
+                               luaL_checkinteger (L, (i)),   \
+                               vname, max);                  \
+        vname--;                                             \
+    } while (0)
+
+
 static int
 function_index (lua_State *L)
 {
     EolFunction *ef = to_eol_function (L);
-    size_t length;
-    const char *name = luaL_checklstring (L, 2, &length);
-    const EolSpecial *s = (length > 2 && name[0] == '_' && name[1] == '_')
-        ? eol_special_lookup (name + 2, length - 2)
-        : NULL;
 
-    if (!s) return luaL_error (L, "invalid field '%s'", name);
-
-    switch (s->code) {
-        case EOL_SPECIAL_NAME:
-            lua_pushstring (L, ef->name);
-            break;
-        case EOL_SPECIAL_TYPE:
-            typeinfo_push_userdata (L, ef->return_typeinfo);
-            break;
-        case EOL_SPECIAL_LIBRARY:
-            library_push_userdata (L, ef->library);
-            break;
-        case EOL_SPECIAL_VALUE:
-            return luaL_error (L, "invalid field '%s'", name);
+    if (lua_type (L, 2) == LUA_TSTRING) {
+        size_t named_field_length = 0;
+        const char *named_field = luaL_checklstring (L, 2, &named_field_length);
+        const EolSpecial *s = (named_field_length > 2 &&
+                               named_field[0] == '_' &&
+                               named_field[1] == '_')
+            ? eol_special_lookup (named_field + 2, named_field_length - 2)
+            : eol_special_lookup (named_field, named_field_length);
+        if (!s) goto invalid_field;
+        switch (s->code) {
+            case EOL_SPECIAL_NAME:
+                lua_pushstring (L, ef->name);
+                break;
+            case EOL_SPECIAL_TYPE:
+                typeinfo_push_userdata (L, ef->return_typeinfo);
+                break;
+            case EOL_SPECIAL_LIBRARY:
+                library_push_userdata (L, ef->library);
+                break;
+            default:
+            invalid_field:
+                return luaL_error (L, "invalid field '%s'", named_field);
+        }
+    } else {
+        L_BOUNDS_CHECK (index, 2, ef->n_param);
+        typeinfo_push_userdata (L, ef->param_types[index]);
     }
     return 1;
 }
@@ -1049,19 +1071,6 @@ variable_len (lua_State *L)
     return 1;
 }
 
-
-#define L_BOUNDS_CHECK(vname, i, expr)                       \
-    lua_Integer vname = luaL_checkinteger (L, (i));          \
-    do {                                                     \
-        size_t max = (expr);                                 \
-        if (vname < 0) vname += max;                         \
-        if (vname <= 0 || vname > max)                       \
-            return luaL_error (L, "index %d out of bounds ", \
-                               "(effective=%d, max=%d)",     \
-                               luaL_checkinteger (L, (i)),   \
-                               vname, max);                  \
-        vname--;                                             \
-    } while (0)
 
 #define ADDR_OFF(ctype, base, offset) \
     ((ctype*) (((uintptr_t) base) + offset))
