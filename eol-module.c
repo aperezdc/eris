@@ -1716,6 +1716,42 @@ eol_offsetof (lua_State *L)
 }
 
 
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+# define EOL_LE 1
+# define EOL_BE 0
+#else
+# define EOL_LE 0
+# define EOL_BE 1
+#endif
+
+static int
+eol_abi (lua_State *L)
+{
+    const char *param = luaL_checkstring (L, 1);
+
+    if (string_equal (param, "le")) {
+        lua_pushboolean (L, EOL_LE);
+    } else if (string_equal (param, "be")) {
+        lua_pushboolean (L, EOL_BE);
+    } else if (string_equal (param, "32bit")) {
+        lua_pushboolean (L, sizeof (ptrdiff_t) == 4);
+    } else if (string_equal (param, "64bit")) {
+        lua_pushboolean (L, sizeof (ptrdiff_t) == 8);
+
+    // TODO: The following flags are unsupported.
+#if 0
+    } else if (string_equal (param, "fpu")) {
+    } else if (string_equal (param, "softfpu")) {
+    } else if (string_equal (param, "eabi")) {
+    } else if (string_equal (param, "win")) {
+#endif
+    } else {
+        return luaL_error (L, "invalid parameter '%s'", param);
+    }
+    return 1;
+}
+
+
 static const luaL_Reg eollib[] = {
     { "load",     eol_load     },
     { "type",     eol_type     },
@@ -1723,6 +1759,7 @@ static const luaL_Reg eollib[] = {
     { "typeof",   eol_typeof   },
     { "offsetof", eol_offsetof },
     { "cast",     eol_cast     },
+    { "abi",      eol_abi      },
     { NULL, NULL },
 };
 
