@@ -1611,6 +1611,11 @@ eol_type (lua_State *L)
     Dwarf_Error d_error = DW_DLE_NE;
     Dwarf_Off d_offset = library_get_tue_offset (el, name, &d_error);
     if (d_offset == DW_DLV_BADOFFSET) {
+        if (d_error == DW_DLE_NE) {
+            /* No libdwarf error: the type was not found */
+            lua_pushnil (L);
+            return 1;
+        }
         return luaL_error (L, "%s: could not look up DWARF TUE offset "
                            "(library: %p; %s)", name, el, dw_errmsg (d_error));
     }
