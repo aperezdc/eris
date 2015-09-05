@@ -803,24 +803,30 @@ make_function_wrapper (lua_State  *L,
 }
 
 
+typedef enum {
+    VARIABLE_PUSH_COPY,
+    VARIABLE_PUSH_NOCOPY,
+} VariablePushMode;
+
 static EolVariable*
 variable_push_userdata (lua_State         *L,
                         EolLibrary        *library,
                         const EolTypeInfo *typeinfo,
                         void              *address,
                         const char        *name,
-                        bool               copy)
+                        VariablePushMode   push_mode)
 {
     CHECK_NOT_NULL (typeinfo);
     CHECK_NOT_NULL (address);
 
     EolVariable *ev;
-    if (copy) {
+    if (push_mode == VARIABLE_PUSH_COPY) {
         const uint32_t size = eol_typeinfo_sizeof (typeinfo);
         ev = lua_newuserdata (L, sizeof (EolVariable) + size);
         symbol_init ((EolSymbol*) ev, library, &ev[1], name);
         memcpy (ev->address, address, size);
     } else {
+        CHECK_SIZE_EQ (VARIABLE_PUSH_NOCOPY, push_mode);
         ev = lua_newuserdata (L, sizeof (EolVariable));
         symbol_init ((EolSymbol*) ev, library, address, name);
     }
@@ -854,7 +860,9 @@ make_variable_wrapper (lua_State  *L,
         return luaL_error (L, "%s: could not obtain type information (%s)",
                            dw_errmsg (d_error));
     }
-    variable_push_userdata (L, library, typeinfo, address, name, false);
+    variable_push_userdata (L, library, typeinfo,
+                            address, name,
+                            VARIABLE_PUSH_NOCOPY);
     return 1;
 }
 
@@ -1118,7 +1126,7 @@ static inline int
 cvalue_push (lua_State         *L,
              const EolTypeInfo *typeinfo,
              void              *address,
-             bool               allocate)
+             VariablePushMode   push_mode)
 {
     CHECK_NOT_ZERO (address);
     typeinfo = eol_typeinfo_get_non_synthetic (typeinfo);
@@ -1156,7 +1164,7 @@ cvalue_push (lua_State         *L,
             if (*ADDR_OFF (void*, address, 0)) {
                 variable_push_userdata (L, NULL, typeinfo,
                                         *ADDR_OFF (void*, address, 0),
-                                        NULL, false);
+                                        NULL, VARIABLE_PUSH_NOCOPY);
             } else {
                 /* Map NULL pointers to "nil". */
                 lua_pushnil (L);
@@ -1167,7 +1175,7 @@ cvalue_push (lua_State         *L,
         case EOL_TYPE_ARRAY:
         case EOL_TYPE_STRUCT:
             variable_push_userdata (L, NULL, typeinfo,
-                                    address, NULL, allocate);
+                                    address, NULL, push_mode);
             return 1;
 
         case EOL_TYPE_VOID:
@@ -1199,7 +1207,8 @@ variable_index_special (lua_State        *L,
             typeinfo_push_userdata (L, V->typeinfo);
             break;
         case EOL_SPECIAL_VALUE:
-            return cvalue_push (L, V->typeinfo, V->address, false);
+            return cvalue_push (L, V->typeinfo, V->address,
+                                VARIABLE_PUSH_NOCOPY);
         case EOL_SPECIAL_LIBRARY:
             library_push_userdata (L, V->library);
             break;
@@ -1236,7 +1245,7 @@ variable_index (lua_State *L)
             return cvalue_push (L, T,
                                 ADDR_OFF (void, V->address,
                                           index * eol_typeinfo_sizeof (T)),
-                                false);
+                                VARIABLE_PUSH_NOCOPY);
         }
         case EOL_TYPE_UNION:
         case EOL_TYPE_STRUCT: {
@@ -1255,7 +1264,7 @@ variable_index (lua_State *L)
                                 eol_typeinfo_is_struct (T)
                                     ? ADDR_OFF (void, V->address, member->offset)
                                     : V->address,
-                                false);
+                                VARIABLE_PUSH_NOCOPY);
         }
         default:
             return luaL_error (L, "not indexable");
@@ -1670,8 +1679,7 @@ eol_cast (lua_State *L)
                             typeinfo,
                             ev->address,
                             ev->name,
-                            false);
-
+                            VARIABLE_PUSH_NOCOPY);
     return 1;
 }
 

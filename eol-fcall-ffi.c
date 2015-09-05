@@ -269,7 +269,8 @@ function_call (lua_State *L)
     TRACE (">" BLUE "done\n" NORMAL);
 
     if (ef->return_typeinfo) {
-        return cvalue_push (L, ef->return_typeinfo, scratch, true);
+        return cvalue_push (L, ef->return_typeinfo, scratch,
+                            VARIABLE_PUSH_COPY);
     } else {
         return 0;
     }
