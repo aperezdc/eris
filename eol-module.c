@@ -1436,8 +1436,6 @@ create_meta (lua_State *L)
 {
     /* EolLibrary */
     luaL_newmetatable (L, EOL_LIBRARY);
-    lua_pushvalue (L, -1);           /* Push metatable */
-    lua_setfield (L, -2, "__index"); /* metatable.__index == metatable */
     luaL_setfuncs (L, library_methods, 0);
     lua_pop (L, 1);
 
