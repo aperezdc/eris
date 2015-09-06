@@ -66,6 +66,11 @@ struct _EolLibrary {
     Dwarf_Signed  d_num_types;
 
     EolTypeCache  type_cache;
+#if EOL_TYPECACHE_STATS
+    uint64_t      type_cache_misses;
+    uint64_t      type_cache_hits;
+#endif /* EOL_TYPECACHE_STATS */
+
     EolLibrary   *next;
 };
 
@@ -934,9 +939,17 @@ library_index (lua_State *L)
         case DW_TAG_inlined_subroutine: /* TODO: Check whether inlines work. */
         case DW_TAG_entry_point:
         case DW_TAG_subprogram:
+#if EOL_TYPECACHE_STATS
+            TRACE ("@type-cache hits=%" PRIu64 " misses=%" PRIu64 "\n",
+                   e->type_cache_hits, e->type_cache_misses);
+#endif /* EOL_TYPECACHE_STATS */
             return make_function_wrapper (L, e, address, name, d_die, d_tag);
 
         case DW_TAG_variable:
+#if EOL_TYPECACHE_STATS
+            TRACE ("@type-cache hits=%" PRIu64 " misses=%" PRIu64 "\n",
+                   e->type_cache_hits, e->type_cache_misses);
+#endif /* EOL_TYPECACHE_STATS */
             return make_variable_wrapper (L, e, address, name, d_die, d_tag);
 
         default:
@@ -1632,6 +1645,12 @@ eol_type (lua_State *L)
         return luaL_error (L, "%s: no type info (%s)",
                            name, dw_errmsg (d_error));
     }
+
+#if EOL_TYPECACHE_STATS
+    TRACE ("@type-cache hits=%" PRIu64 " misses=%" PRIu64 "\n",
+           el->type_cache_hits, el->type_cache_misses);
+#endif /* EOL_TYPECACHE_STATS */
+
     typeinfo_push_userdata (L, typeinfo);
     return 1;
 }
@@ -1713,6 +1732,10 @@ eol_typeof (lua_State *L)
 
                 const EolTypeInfo *typeinfo =
                         library_lookup_type (el, d_offset, &d_error);
+#if EOL_TYPECACHE_STATS
+                TRACE ("@type-cache hits=%" PRIu64 " misses=%" PRIu64 "\n",
+                       el->type_cache_hits, el->type_cache_misses);
+#endif /* EOL_TYPECACHE_STATS */
                 if (!typeinfo) {
                     return luaL_error (L, "%s: no type info (library: %p; %s)",
                                        name, el, dw_errmsg (d_error));
@@ -1956,10 +1979,16 @@ library_lookup_type (EolLibrary  *library,
     const EolTypeInfo *typeinfo =
             eol_type_cache_lookup (&library->type_cache, d_offset);
     if (!typeinfo) {
+#if EOL_TYPECACHE_STATS
+        library->type_cache_misses++;
+#endif /* EOL_TYPECACHE_STATS */
         typeinfo = library_build_typeinfo (library, d_offset, d_error);
         CHECK_NOT_NULL (typeinfo);
         eol_type_cache_add (&library->type_cache, d_offset, typeinfo);
     }
+#if EOL_TYPECACHE_STATS
+    else library->type_cache_hits++;
+#endif /* EOL_TYPECACHE_STATS */
     return typeinfo;
 }
 
