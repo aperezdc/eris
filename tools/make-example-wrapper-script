@@ -3,21 +3,25 @@
 # Usage: $0 lua-binary script.lua objdir outfile
 #
 
+pushd "$(dirname "$1")" &> /dev/null
+luadir=$(pwd)
+popd &> /dev/null
+
 mkdir -p "$3" "$(dirname "$4")"
 curdir=$(pwd)
 
-cd "$(dirname "$2")"
+pushd "$(dirname "$2")" &> /dev/null
 script="$(pwd)/$(basename "$2")"
-cd "${curdir}"
+popd &> /dev/null
 
-cd "$3"
+pushd "$3" &> /dev/null
 objdir=$(pwd)
-cd "${curdir}"
+popd &> /dev/null
 
 cat > "$4" <<EOF
 #! /bin/sh
 set -e
 cd '${objdir}'
-exec '$1' '${script}' "\$@"
+exec '${luadir}/$(basename "$1")' '${script}' "\$@"
 EOF
 chmod +x "$4"
